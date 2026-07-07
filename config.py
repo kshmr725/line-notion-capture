@@ -15,6 +15,7 @@ class Settings:
     notion_token = os.getenv("NOTION_TOKEN", "")
     notion_database_id = os.getenv("NOTION_DATABASE_ID", "")
     app_base_url = os.getenv("APP_BASE_URL", "")
+    database_path = os.getenv("DATABASE_PATH", "data/line-notion-capture.sqlite3")
 
 
 settings = Settings()

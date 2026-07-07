@@ -2,6 +2,22 @@
 
 LINE 當入口,把使用者傳來的文字/網址交給 Gemini 優先整理,DeepSeek 備援,最後寫進 Notion database。
 
+## 系統能力
+
+- LINE webhook 簽章驗證
+- 文字/網址訊息接收
+- SQLite 入庫,保存每筆訊息處理狀態
+- message key 去重,避免 LINE 重送造成 Notion 重複寫入
+- Gemini 優先整理,DeepSeek 備援
+- AI 全失敗時 degraded 保存原文
+- Notion database properties + page body 同步寫入
+- 瀏覽器管理頁 `/`
+- 狀態 API `/api/status`
+- 最近紀錄 API `/api/captures`
+- dry-run 模式與 browser debug form
+
+白話:這已經不是只會收一則訊息的 MVP,而是一個有狀態、有去重、有觀測頁的 production v1。
+
 ## 已建立的 Notion database
 
 - Database: `LINE Capture Inbox`
@@ -51,6 +67,7 @@ GEMINI_API_KEY=
 DEEPSEEK_API_KEY=
 NOTION_TOKEN=
 NOTION_DATABASE_ID=1b8c5d8e33cc416ca86f75e04cb15c40
+DATABASE_PATH=data/line-notion-capture.sqlite3
 ```
 
 正式上線前要做:
@@ -74,14 +91,30 @@ https://你的網域/line/webhook
 
 本專案附 `render.yaml`,可直接建立 web service。Render 需要填上 `.env.example` 裡的 secret。
 
-## MVP 流程
+## Production v1 流程
 
 1. 使用者傳 LINE 文字或網址
-2. Bot 回「收到，正在整理到 Notion...」
-3. Gemini 整理
-4. Gemini 失敗則 DeepSeek 備援
-5. 兩者都失敗則以 `degraded` 保存原文
-6. 寫入 Notion
-7. Bot 回「已整理完成」
+2. Webhook 驗證 LINE 簽章
+3. 訊息寫入 SQLite,狀態為 `received`
+4. 若同一個 message key 已完成,直接回覆既有 Notion URL
+5. 狀態改為 `processing`
+6. Gemini 整理
+7. Gemini 失敗則 DeepSeek 備援
+8. 兩者都失敗則以 `degraded` 保存原文
+9. 寫入 Notion
+10. SQLite 狀態改為 `completed`
+11. Bot 回「已整理完成」
+12. 失敗時 SQLite 狀態改為 `failed`,並保存錯誤訊息
 
 白話:這條線是一般 user-facing 收件系統,不要和你的私人 Telegram+Obsidian 混在一起。
+
+## 狀態欄位
+
+SQLite `captures.status` 會出現:
+
+- `received`:已收到但尚未整理
+- `processing`:正在整理/寫入
+- `completed`:已寫入 Notion
+- `failed`:處理失敗,可在 `/api/captures` 看錯誤
+
+白話:出問題時不用猜,先看 dashboard 或 API。

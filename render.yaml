@@ -17,3 +17,7 @@ services:
         sync: false
       - key: NOTION_DATABASE_ID
         value: 1b8c5d8e33cc416ca86f75e04cb15c40
+      - key: DATABASE_PATH
+        value: data/line-notion-capture.sqlite3
+      - key: DRY_RUN
+        value: false

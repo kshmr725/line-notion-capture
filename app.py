@@ -7,6 +7,7 @@ from urllib.parse import urljoin
 
 from flask import Flask, jsonify, render_template_string, request
 
+import capture_store
 from config import settings
 from line_client import reply_text, verify_signature
 from llm_router import organize
@@ -19,6 +20,38 @@ app.config["DRY_RUN_VISIBLE"] = settings.dry_run
 @app.get("/health")
 def health():
     return jsonify({"status": "ok"})
+
+
+@app.get("/api/status")
+def api_status():
+    return jsonify({"status": "ok", "dry_run": bool(app.config.get("DRY_RUN_VISIBLE")), "stats": capture_store.stats()})
+
+
+@app.get("/api/captures")
+def api_captures():
+    records = capture_store.list_recent(limit=int(request.args.get("limit", 25)))
+    return jsonify(
+        {
+            "captures": [
+                {
+                    "id": record.id,
+                    "message_key": record.message_key,
+                    "source_user": record.source_user,
+                    "source_type": record.source_type,
+                    "status": record.status,
+                    "title": record.title,
+                    "category": record.category,
+                    "provider": record.provider,
+                    "notion_url": record.notion_url,
+                    "error": record.error,
+                    "duplicate_count": record.duplicate_count,
+                    "created_at": record.created_at,
+                    "updated_at": record.updated_at,
+                }
+                for record in records
+            ]
+        }
+    )
 
 
 @app.get("/")
@@ -44,21 +77,51 @@ def extract_text_event(event: dict[str, Any]) -> tuple[str, str, str]:
     return f"[{msg_type}] message received. Content download is not enabled in MVP.", msg_type, f"{source_user}:{message_id}"
 
 
+def source_user_from_event(event: dict[str, Any]) -> str:
+    source = event.get("source") or {}
+    return source.get("userId") or source.get("groupId") or source.get("roomId") or "unknown"
+
+
 def process_message_event(event: dict[str, Any]) -> dict[str, str]:
     raw_text, source_type, message_key = extract_text_event(event)
+    source_user = source_user_from_event(event)
+    record, created = capture_store.record_inbound(
+        message_key=message_key,
+        source_user=source_user,
+        source_type=source_type,
+        raw_input=raw_text,
+        payload=event,
+    )
+    if not created and record.status == "completed":
+        return {
+            "title": record.title,
+            "category": record.category,
+            "provider": record.provider,
+            "notion_url": record.notion_url,
+            "status": "duplicate_completed",
+        }
+    capture_store.mark_processing(message_key)
     result = organize(raw_text, source_type)
     notion_url = create_capture_page(
         result=result,
         raw_input=raw_text,
-        source_user=(event.get("source") or {}).get("userId", "unknown"),
+        source_user=source_user,
         source_type=source_type,
         line_message_id=message_key,
+    )
+    capture_store.mark_completed(
+        message_key=message_key,
+        title=result.title,
+        category=result.category,
+        provider=result.provider,
+        notion_url=notion_url,
     )
     return {
         "title": result.title,
         "category": result.category,
         "provider": result.provider,
         "notion_url": notion_url,
+        "status": "completed",
     }
 
 
@@ -76,11 +139,17 @@ def line_webhook():
         try:
             reply_text(reply_token, "收到，正在整理到 Notion...")
             processed = process_message_event(event)
-            done = f"已整理完成\n{processed['title']}\n分類:{processed['category']}\nAI:{processed['provider']}"
+            prefix = "這則已整理過" if processed["status"] == "duplicate_completed" else "已整理完成"
+            done = f"{prefix}\n{processed['title']}\n分類:{processed['category']}\nAI:{processed['provider']}"
             if processed["notion_url"]:
                 done += f"\n{processed['notion_url']}"
             reply_text(reply_token, done)
         except Exception as exc:
+            try:
+                _, _, message_key = extract_text_event(event)
+                capture_store.mark_failed(message_key, f"{type(exc).__name__}: {exc}")
+            except Exception:
+                pass
             reply_text(reply_token, f"已收到，但整理失敗，請稍後再試。\n{type(exc).__name__}")
     return jsonify({"status": "ok"})
 
@@ -117,6 +186,13 @@ DASHBOARD_HTML = """
     p { line-height: 1.65; }
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-top: 24px; }
     .panel { background: #fff; border: 1px solid #dedad1; border-radius: 8px; padding: 18px; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+    .stat { border: 1px solid #e5ded2; border-radius: 8px; padding: 12px; background: #fbfaf7; }
+    .stat strong { display: block; font-size: 24px; margin-top: 4px; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { border-bottom: 1px solid #e5ded2; padding: 9px 6px; text-align: left; vertical-align: top; }
+    th { color: #6f685d; font-weight: 650; }
+    .scroll { overflow-x: auto; }
     code { background: #eee8dc; padding: 2px 5px; border-radius: 4px; word-break: break-all; }
     label { display: block; font-weight: 650; margin: 14px 0 6px; }
     input, textarea { width: 100%; box-sizing: border-box; border: 1px solid #cfc8ba; border-radius: 6px; padding: 10px; font: inherit; }
@@ -135,6 +211,7 @@ DASHBOARD_HTML = """
         <h2>狀態</h2>
         <p>DRY_RUN: <code>{{ dry_run }}</code></p>
         <p>Webhook URL:<br><code>{{ webhook_url }}</code></p>
+        <div class="stats" id="stats"></div>
       </section>
       <section class="panel">
         <h2>Browser Dry Run</h2>
@@ -147,10 +224,49 @@ DASHBOARD_HTML = """
     </div>
     <h2>結果</h2>
     <pre id="result">尚未送出</pre>
+    <h2>最近紀錄</h2>
+    <section class="panel scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Status</th>
+            <th>Title</th>
+            <th>Category</th>
+            <th>Provider</th>
+            <th>Dup</th>
+          </tr>
+        </thead>
+        <tbody id="captures"></tbody>
+      </table>
+    </section>
   </main>
   <script>
     const button = document.querySelector("#send");
     const result = document.querySelector("#result");
+    const stats = document.querySelector("#stats");
+    const captures = document.querySelector("#captures");
+    async function refreshStatus() {
+      const [statusResponse, capturesResponse] = await Promise.all([
+        fetch("/api/status"),
+        fetch("/api/captures?limit=12")
+      ]);
+      const statusData = await statusResponse.json();
+      const capturesData = await capturesResponse.json();
+      stats.innerHTML = Object.entries(statusData.stats).map(([key, value]) =>
+        `<div class="stat">${key}<strong>${value}</strong></div>`
+      ).join("");
+      captures.innerHTML = capturesData.captures.map((row) =>
+        `<tr>
+          <td>${row.id}</td>
+          <td>${row.status}</td>
+          <td>${row.title || "(pending)"}</td>
+          <td>${row.category || ""}</td>
+          <td>${row.provider || ""}</td>
+          <td>${row.duplicate_count}</td>
+        </tr>`
+      ).join("");
+    }
     button.addEventListener("click", async () => {
       button.disabled = true;
       result.textContent = "送出中...";
@@ -165,12 +281,14 @@ DASHBOARD_HTML = """
         });
         const data = await response.json();
         result.textContent = JSON.stringify(data, null, 2);
+        await refreshStatus();
       } catch (error) {
         result.textContent = String(error);
       } finally {
         button.disabled = false;
       }
     });
+    refreshStatus().catch((error) => { result.textContent = String(error); });
   </script>
 </body>
 </html>
