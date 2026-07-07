@@ -20,6 +20,28 @@ cp .env.example .env
 python app.py
 ```
 
+## 免 token 乾跑驗證
+
+先在 `.env` 設定:
+
+```bash
+LINE_CHANNEL_SECRET=dry-run-secret
+DRY_RUN=true
+```
+
+啟動服務後,另開一個 terminal:
+
+```bash
+. .venv/bin/activate
+python scripts/simulate_line_event.py "朋友傳來一個測試想法:下週整理東京行程"
+```
+
+預期:
+
+- Terminal 看到 LINE dry-run 回覆
+- Terminal 看到 Notion dry-run page
+- 模擬 script 回 `200 {"status":"ok"}`
+
 ## 必填環境變數
 
 ```bash
@@ -30,6 +52,15 @@ DEEPSEEK_API_KEY=
 NOTION_TOKEN=
 NOTION_DATABASE_ID=1b8c5d8e33cc416ca86f75e04cb15c40
 ```
+
+正式上線前要做:
+
+1. 建 LINE Messaging API channel,取得 `LINE_CHANNEL_SECRET` 與 long-lived `LINE_CHANNEL_ACCESS_TOKEN`
+2. 建 Notion integration,取得 `NOTION_TOKEN`
+3. 把 `LINE Capture Inbox` database 分享給該 Notion integration
+4. Render 部署本專案,填入以上環境變數
+5. LINE Developers Console 的 webhook URL 設成 `https://你的 Render 網域/line/webhook`
+6. 關掉 `DRY_RUN`
 
 ## LINE Webhook URL
 

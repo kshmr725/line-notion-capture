@@ -2,6 +2,7 @@ import os
 
 
 class Settings:
+    dry_run = os.getenv("DRY_RUN", "").lower() in {"1", "true", "yes", "on"}
     line_channel_secret = os.getenv("LINE_CHANNEL_SECRET", "")
     line_channel_access_token = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
     gemini_api_key = os.getenv("GEMINI_API_KEY", "")

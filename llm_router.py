@@ -103,6 +103,15 @@ def call_deepseek(raw_text: str, source_type: str) -> LLMResult:
 
 
 def organize(raw_text: str, source_type: str = "text") -> LLMResult:
+    if settings.dry_run:
+        return LLMResult(
+            title="乾跑測試收件",
+            summary=f"這是一則 {source_type} 測試訊息，正式環境會由 Gemini 優先整理、DeepSeek 備援。",
+            category="Inbox",
+            tags=["dry-run"],
+            provider="degraded",
+            degraded=True,
+        )
     try:
         return call_gemini(raw_text, source_type)
     except Exception:

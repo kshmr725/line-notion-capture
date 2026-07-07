@@ -27,6 +27,18 @@ def create_capture_page(
     line_message_id: str,
     attachment_url: str = "",
 ) -> str:
+    if settings.dry_run:
+        print(
+            "[NOTION DRY RUN page]",
+            {
+                "title": result.title,
+                "category": result.category,
+                "source_user": source_user,
+                "source_type": source_type,
+                "raw_input": raw_input,
+            },
+        )
+        return "https://notion.example/dry-run"
     if not settings.notion_token or not settings.notion_database_id:
         raise RuntimeError("missing Notion settings")
     properties = {

@@ -23,6 +23,9 @@ def verify_signature(body: bytes, signature: str, secret: str | None = None) -> 
 
 
 def reply_text(reply_token: str, text: str) -> None:
+    if settings.dry_run:
+        print(f"[LINE DRY RUN reply] {text}")
+        return
     if not settings.line_channel_access_token or not reply_token:
         return
     payload: dict[str, Any] = {

@@ -1,3 +1,4 @@
+import llm_router
 from llm_router import fallback_result, parse_llm_json
 
 
@@ -17,3 +18,18 @@ def test_fallback_result():
     assert result.provider == "degraded"
     assert result.degraded
     assert result.category == "Inbox"
+
+
+def test_organize_dry_run_does_not_call_providers(monkeypatch):
+    monkeypatch.setattr(llm_router.settings, "dry_run", True)
+
+    def fail_provider(*args, **kwargs):
+        raise AssertionError("provider should not be called in dry run")
+
+    monkeypatch.setattr(llm_router, "call_gemini", fail_provider)
+    monkeypatch.setattr(llm_router, "call_deepseek", fail_provider)
+
+    result = llm_router.organize("hello", "text")
+
+    assert result.provider == "degraded"
+    assert result.tags == ["dry-run"]
