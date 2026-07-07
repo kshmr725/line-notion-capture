@@ -1,5 +1,10 @@
 import os
 
+from dotenv import load_dotenv
+
+
+load_dotenv()
+
 
 class Settings:
     dry_run = os.getenv("DRY_RUN", "").lower() in {"1", "true", "yes", "on"}
