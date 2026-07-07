@@ -35,6 +35,9 @@ def test_create_capture_page_uses_database_id(monkeypatch):
 
     assert url == "https://notion.example/page"
     assert captured["json"]["parent"] == {"database_id": "db123"}
+    child_types = [child["type"] for child in captured["json"]["children"]]
+    assert child_types == ["heading_2", "paragraph", "heading_2", "paragraph", "heading_2", "paragraph"]
+    assert captured["json"]["children"][0]["heading_2"]["rich_text"][0]["text"]["content"] == "摘要"
 
 
 def test_create_capture_page_dry_run_does_not_call_notion(monkeypatch):

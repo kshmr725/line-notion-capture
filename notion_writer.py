@@ -19,6 +19,22 @@ def _headers() -> dict[str, str]:
     }
 
 
+def _paragraph(text: str) -> dict:
+    return {
+        "object": "block",
+        "type": "paragraph",
+        "paragraph": {"rich_text": [{"type": "text", "text": {"content": text[:1900]}}]},
+    }
+
+
+def _heading(text: str) -> dict:
+    return {
+        "object": "block",
+        "type": "heading_2",
+        "heading_2": {"rich_text": [{"type": "text", "text": {"content": text[:100]}}]},
+    }
+
+
 def create_capture_page(
     result: LLMResult,
     raw_input: str,
@@ -60,11 +76,12 @@ def create_capture_page(
         "parent": {"database_id": settings.notion_database_id},
         "properties": properties,
         "children": [
-            {
-                "object": "block",
-                "type": "paragraph",
-                "paragraph": {"rich_text": [{"type": "text", "text": {"content": raw_input[:1900]}}]},
-            }
+            _heading("摘要"),
+            _paragraph(result.summary or "AI 未產生摘要。"),
+            _heading("原始訊息"),
+            _paragraph(raw_input),
+            _heading("來源資訊"),
+            _paragraph(f"source_user: {source_user}\nsource_type: {source_type}\nai_provider: {result.provider}"),
         ],
     }
     resp = requests.post("https://api.notion.com/v1/pages", json=payload, headers=_headers(), timeout=30)

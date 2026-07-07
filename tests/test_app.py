@@ -1,4 +1,5 @@
-from app import extract_text_event
+import app as app_module
+from app import app, extract_text_event
 
 
 def test_extract_text_event_text():
@@ -16,3 +17,41 @@ def test_extract_text_event_url():
     )
     assert raw == "https://example.com"
     assert source_type == "url"
+
+
+def test_extract_text_event_embedded_url():
+    raw, source_type, _ = extract_text_event(
+        {"source": {"userId": "U1"}, "message": {"id": "M1", "type": "text", "text": "看這篇 https://example.com/a"}}
+    )
+    assert raw == "看這篇 https://example.com/a"
+    assert source_type == "url"
+
+
+def test_dashboard_shows_webhook_url():
+    client = app.test_client()
+    response = client.get("/")
+    assert response.status_code == 200
+    assert b"/line/webhook" in response.data
+
+
+def test_debug_simulate_requires_dry_run(monkeypatch):
+    app.config["DRY_RUN_VISIBLE"] = False
+    response = app.test_client().post("/debug/simulate", json={"text": "hello"})
+    assert response.status_code == 403
+
+
+def test_debug_simulate_processes_message_in_dry_run(monkeypatch):
+    app.config["DRY_RUN_VISIBLE"] = True
+    monkeypatch.setattr(app_module, "create_capture_page", lambda **kwargs: "https://notion.example/page")
+
+    class Result:
+        title = "測試標題"
+        category = "Inbox"
+        provider = "degraded"
+
+    monkeypatch.setattr(app_module, "organize", lambda raw_text, source_type: Result())
+    response = app.test_client().post("/debug/simulate", json={"text": "hello", "user_id": "U1"})
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["result"]["title"] == "測試標題"
+    assert data["result"]["notion_url"] == "https://notion.example/page"
