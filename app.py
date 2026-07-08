@@ -9,9 +9,11 @@ from flask import Flask, jsonify, render_template_string, request
 
 import capture_store
 from config import settings
+from format_templates import format_help, get_template, normalize_template_key
 from line_client import push_text, reply_text, verify_signature
 from llm_router import organize
 from notion_writer import create_capture_page
+import user_store
 
 app = Flask(__name__)
 app.config["DRY_RUN_VISIBLE"] = settings.dry_run
@@ -82,9 +84,37 @@ def source_user_from_event(event: dict[str, Any]) -> str:
     return source.get("userId") or source.get("groupId") or source.get("roomId") or "unknown"
 
 
+def handle_text_command(text: str, source_user: str) -> str | None:
+    stripped = (text or "").strip()
+    lowered = stripped.lower()
+    preference = user_store.get_or_create(source_user)
+    if lowered in {"help", "說明", "幫助", "設定", "格式"}:
+        return (
+            "Kevin Capture 可以像 LINE Keep 一樣收資料，並整理到 Notion。\n\n"
+            f"{format_help(preference.default_template, preference.custom_template)}"
+        )
+    if lowered.startswith("格式 "):
+        payload = stripped.split(maxsplit=1)[1].strip()
+        if payload.startswith("自訂 "):
+            custom = payload.split(maxsplit=1)[1].strip()
+            if not custom:
+                return "請在「格式 自訂」後面寫你想要的整理規則。"
+            preference = user_store.set_template(source_user, "custom", custom)
+            template = get_template(preference.default_template, preference.custom_template)
+            return f"已更新整理格式：{template.label}\n\n之後你丟進來的資料會照這個規則整理：\n{preference.custom_template}"
+        template_key = normalize_template_key(payload)
+        if not template_key:
+            return format_help(preference.default_template, preference.custom_template)
+        preference = user_store.set_template(source_user, template_key)
+        template = get_template(preference.default_template, preference.custom_template)
+        return f"已更新整理格式：{template.label}\n\n{template.description}"
+    return None
+
+
 def process_message_event(event: dict[str, Any]) -> dict[str, str]:
     raw_text, source_type, message_key = extract_text_event(event)
     source_user = source_user_from_event(event)
+    preference = user_store.get_or_create(source_user)
     record, created = capture_store.record_inbound(
         message_key=message_key,
         source_user=source_user,
@@ -101,7 +131,12 @@ def process_message_event(event: dict[str, Any]) -> dict[str, str]:
             "status": "duplicate_completed",
         }
     capture_store.mark_processing(message_key)
-    result = organize(raw_text, source_type)
+    result = organize(
+        raw_text,
+        source_type,
+        template_key=preference.default_template,
+        custom_template=preference.custom_template,
+    )
     notion_url = create_capture_page(
         result=result,
         raw_input=raw_text,
@@ -120,6 +155,7 @@ def process_message_event(event: dict[str, Any]) -> dict[str, str]:
         "title": result.title,
         "category": result.category,
         "provider": result.provider,
+        "template": result.template_label,
         "notion_url": notion_url,
         "status": "completed",
     }
@@ -138,10 +174,21 @@ def line_webhook():
         reply_token = event.get("replyToken", "")
         source_user = source_user_from_event(event)
         try:
+            raw_text, source_type, _ = extract_text_event(event)
+            if source_type == "text":
+                command_reply = handle_text_command(raw_text, source_user)
+                if command_reply:
+                    reply_text(reply_token, command_reply)
+                    continue
             reply_text(reply_token, "收到，我正在整理成 Notion 筆記。完成後會再通知你。")
             processed = process_message_event(event)
             prefix = "這則已整理過" if processed["status"] == "duplicate_completed" else "已整理完成"
-            done = f"✅ {prefix}\n\n📌 {processed['title']}\n📂 分類：{processed['category']}\n🤖 AI：{processed['provider']}"
+            done = (
+                f"✅ {prefix}\n\n📌 {processed['title']}"
+                f"\n📂 分類：{processed['category']}"
+                f"\n🧩 格式：{processed.get('template') or '自動判斷'}"
+                f"\n🤖 AI：{processed['provider']}"
+            )
             if processed["notion_url"]:
                 done += f"\n\n在 Notion 打開：\n{processed['notion_url']}"
             push_text(source_user, done)

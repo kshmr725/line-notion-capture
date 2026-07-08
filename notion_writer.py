@@ -90,6 +90,7 @@ def _patch_database_properties(properties: dict) -> None:
         "Portal URL": {"url": {}},
         "Capture Date": {"date": {}},
         "Time Bucket": {"select": {}},
+        "Format": {"select": {}},
         "Action": {"rich_text": {}},
         "Key Point": {"rich_text": {}},
     }
@@ -156,6 +157,7 @@ def create_capture_page(
         "Portal URL": {"url": PORTAL_URL},
         "Capture Date": {"date": {"start": created_at.date().isoformat()}},
         "Time Bucket": _optional_select(time_bucket(created_at)),
+        "Format": _optional_select(result.template_label),
         "Action": _optional_rich_text(result.action),
         "Key Point": _optional_rich_text(result.key_point),
     }
@@ -165,7 +167,10 @@ def create_capture_page(
     if attachment_url:
         properties["Attachment URL"] = {"url": attachment_url}
     children = [
-        _callout(f"分類：{result.category} / {result.folder}\n依據：{result.category_reason}", "📂"),
+        _callout(
+            f"分類：{result.category} / {result.folder}\n格式：{result.template_label}\n依據：{result.category_reason}",
+            "📂",
+        ),
         _callout(f"分類入口：{category_page.title}\n{category_page.url}", "🧭"),
         _callout(result.what or result.summary or "已收進 Notion。", "📌"),
         _callout(result.key_point or result.summary or "尚無重點。", "💡"),

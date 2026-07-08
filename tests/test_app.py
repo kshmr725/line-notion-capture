@@ -57,8 +57,10 @@ def test_debug_simulate_processes_message_in_dry_run(monkeypatch):
         action = "下一步"
         detail = "- 重點"
         tags = []
+        template_key = "keep"
+        template_label = "Keep 快速收藏"
 
-    monkeypatch.setattr(app_module, "organize", lambda raw_text, source_type: Result())
+    monkeypatch.setattr(app_module, "organize", lambda raw_text, source_type, **kwargs: Result())
     response = app.test_client().post("/debug/simulate", json={"text": "hello", "user_id": "U1"})
     assert response.status_code == 200
     data = response.get_json()
@@ -84,8 +86,10 @@ def test_process_message_event_dedupes_completed(monkeypatch, tmp_path):
         action = "下一步"
         detail = "- 重點"
         tags = []
+        template_key = "keep"
+        template_label = "Keep 快速收藏"
 
-    def fake_organize(raw_text, source_type):
+    def fake_organize(raw_text, source_type, **kwargs):
         calls["organize"] += 1
         return Result()
 
@@ -122,8 +126,10 @@ def test_line_webhook_pushes_completion_after_initial_reply(monkeypatch, tmp_pat
         action = "下一步"
         detail = "- 重點"
         tags = []
+        template_key = "article"
+        template_label = "文章摘要"
 
-    monkeypatch.setattr(app_module, "organize", lambda raw_text, source_type: Result())
+    monkeypatch.setattr(app_module, "organize", lambda raw_text, source_type, **kwargs: Result())
 
     response = app.test_client().post(
         "/line/webhook",
@@ -146,6 +152,35 @@ def test_line_webhook_pushes_completion_after_initial_reply(monkeypatch, tmp_pat
     assert pushes[0][0] == "U1"
     assert "已整理完成" in pushes[0][1]
     assert "AI自動化" in pushes[0][1]
+
+
+def test_line_webhook_handles_format_command(monkeypatch, tmp_path):
+    monkeypatch.setattr(app_module.capture_store.settings, "database_path", str(tmp_path / "captures.sqlite3"))
+    monkeypatch.setattr(app_module, "verify_signature", lambda body, signature: True)
+    replies = []
+    pushes = []
+    monkeypatch.setattr(app_module, "reply_text", lambda token, text: replies.append((token, text)))
+    monkeypatch.setattr(app_module, "push_text", lambda user_id, text: pushes.append((user_id, text)))
+
+    response = app.test_client().post(
+        "/line/webhook",
+        json={
+            "events": [
+                {
+                    "type": "message",
+                    "replyToken": "reply-token",
+                    "source": {"type": "user", "userId": "U1"},
+                    "message": {"id": "M1", "type": "text", "text": "格式 文章"},
+                }
+            ]
+        },
+        headers={"X-Line-Signature": "ok"},
+    )
+
+    assert response.status_code == 200
+    assert len(replies) == 1
+    assert "文章摘要" in replies[0][1]
+    assert pushes == []
 
 
 def test_api_status_and_captures(monkeypatch, tmp_path):

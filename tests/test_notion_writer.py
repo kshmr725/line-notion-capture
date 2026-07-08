@@ -43,6 +43,7 @@ def test_create_capture_page_uses_database_id(monkeypatch):
                         "AI Provider": {},
                         "LINE Message ID": {},
                         "Created At": {},
+                        "Format": {},
                     }
                 }
 
@@ -68,6 +69,8 @@ def test_create_capture_page_uses_database_id(monkeypatch):
         detail="- 第一點\n- 第二點",
         tags=["tag"],
         provider="gemini",
+        template_key="article",
+        template_label="文章摘要",
     )
 
     url = notion_writer.create_capture_page(result, "原文", "U1", "text", "M1")
@@ -78,6 +81,7 @@ def test_create_capture_page_uses_database_id(monkeypatch):
     assert child_types[:7] == ["callout", "callout", "callout", "callout", "callout", "divider", "heading_2"]
     assert captured["json"]["children"][0]["callout"]["rich_text"][0]["text"]["content"].startswith("分類：")
     assert "分類入口" in captured["json"]["children"][1]["callout"]["rich_text"][0]["text"]["content"]
+    assert captured["json"]["properties"]["Format"]["select"]["name"] == "文章摘要"
     assert captured["json"]["properties"]["Category Page"]["url"].startswith("https://app.notion.com/p/")
     append_calls = [patch for patch in captured["patches"] if "/v1/blocks/" in patch["url"]]
     assert append_calls

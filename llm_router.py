@@ -8,6 +8,7 @@ from typing import Any
 import requests
 
 from config import settings
+from format_templates import FormatTemplate, choose_template
 from taxonomy import Classification, classify
 
 
@@ -28,11 +29,18 @@ class LLMResult:
     detail: str
     tags: list[str]
     provider: str
+    template_key: str = "auto"
+    template_label: str = "自動判斷"
     degraded: bool = False
 
 
-def fallback_result(raw_text: str, classification: Classification | None = None) -> LLMResult:
+def fallback_result(
+    raw_text: str,
+    classification: Classification | None = None,
+    template: FormatTemplate | None = None,
+) -> LLMResult:
     classification = classification or classify(raw_text)
+    template = template or choose_template("auto", classification.key, "text")
     title = raw_text.strip().splitlines()[0][:80] if raw_text.strip() else "LINE 收件"
     return LLMResult(
         title=title or "LINE 收件",
@@ -47,6 +55,8 @@ def fallback_result(raw_text: str, classification: Classification | None = None)
         detail=raw_text[:1200],
         tags=[],
         provider="degraded",
+        template_key=template.key,
+        template_label=template.label,
         degraded=True,
     )
 
@@ -57,11 +67,17 @@ def _list_of_strings(value: Any, limit: int = 5, item_limit: int = 80) -> list[s
     return [str(item).strip()[:item_limit] for item in value if str(item).strip()][:limit]
 
 
-def parse_llm_json(text: str, provider: str, classification: Classification | None = None) -> LLMResult:
+def parse_llm_json(
+    text: str,
+    provider: str,
+    classification: Classification | None = None,
+    template: FormatTemplate | None = None,
+) -> LLMResult:
     match = JSON_RE.search(text)
     if not match:
         raise ValueError("LLM did not return JSON")
     classification = classification or classify(text)
+    template = template or choose_template("auto", classification.key, "text")
     data: dict[str, Any] = json.loads(match.group(0))
     title = str(data.get("title") or "LINE 收件")[:100]
     what = str(data.get("what") or data.get("summary") or title)[:500]
@@ -83,22 +99,26 @@ def parse_llm_json(text: str, provider: str, classification: Classification | No
         detail=detail,
         tags=_list_of_strings(data.get("tags"), limit=5, item_limit=24),
         provider=provider,
+        template_key=template.key,
+        template_label=template.label,
     )
 
 
-def prompt(raw_text: str, source_type: str, classification: Classification) -> str:
+def prompt(raw_text: str, source_type: str, classification: Classification, template: FormatTemplate) -> str:
     return (
         "你是 LINE 收件整理助手。請把使用者輸入整理成朋友也能快速閱讀的繁體中文筆記。"
         "分類已由系統規則決定，禁止自行改分類；你只負責摘要、重點與下一步。"
+        "請依照指定整理格式輸出；不同內容要有不同結構，不要把非地點資料套成餐廳卡片。"
         "只回 JSON,不要 markdown。格式:"
         '{"title":"短標題","summary":"80字內總結","what":"這是什麼","key_point":"關鍵重點",'
         '"action":"行動建議","detail_points":["3到6個重點"],"tags":["最多5個短標籤"]}'
         f"\n\ncategory:{classification.label}\nfolder:{classification.folder}\ncategory_reason:{classification.reason_text()}"
+        f"\nformat:{template.label}\nformat_instruction:{template.prompt_hint}"
         f"\n\nsource_type:{source_type}\nraw:\n{raw_text[:6000]}"
     )
 
 
-def call_gemini(raw_text: str, source_type: str, classification: Classification) -> LLMResult:
+def call_gemini(raw_text: str, source_type: str, classification: Classification, template: FormatTemplate) -> LLMResult:
     if not settings.gemini_api_key:
         raise RuntimeError("missing GEMINI_API_KEY")
     url = (
@@ -108,23 +128,23 @@ def call_gemini(raw_text: str, source_type: str, classification: Classification)
     resp = requests.post(
         url,
         params={"key": settings.gemini_api_key},
-        json={"contents": [{"parts": [{"text": prompt(raw_text, source_type, classification)}]}]},
+        json={"contents": [{"parts": [{"text": prompt(raw_text, source_type, classification, template)}]}]},
         timeout=35,
     )
     resp.raise_for_status()
     data = resp.json()
     text = data["candidates"][0]["content"]["parts"][0]["text"]
-    return parse_llm_json(text, "gemini", classification)
+    return parse_llm_json(text, "gemini", classification, template)
 
 
-def call_deepseek(raw_text: str, source_type: str, classification: Classification) -> LLMResult:
+def call_deepseek(raw_text: str, source_type: str, classification: Classification, template: FormatTemplate) -> LLMResult:
     if not settings.deepseek_api_key:
         raise RuntimeError("missing DEEPSEEK_API_KEY")
     resp = requests.post(
         "https://api.deepseek.com/chat/completions",
         json={
             "model": "deepseek-chat",
-            "messages": [{"role": "user", "content": prompt(raw_text, source_type, classification)}],
+            "messages": [{"role": "user", "content": prompt(raw_text, source_type, classification, template)}],
             "temperature": 0.2,
         },
         headers={"Authorization": f"Bearer {settings.deepseek_api_key}"},
@@ -132,11 +152,17 @@ def call_deepseek(raw_text: str, source_type: str, classification: Classificatio
     )
     resp.raise_for_status()
     text = resp.json()["choices"][0]["message"]["content"]
-    return parse_llm_json(text, "deepseek", classification)
+    return parse_llm_json(text, "deepseek", classification, template)
 
 
-def organize(raw_text: str, source_type: str = "text") -> LLMResult:
+def organize(
+    raw_text: str,
+    source_type: str = "text",
+    template_key: str = "auto",
+    custom_template: str = "",
+) -> LLMResult:
     classification = classify(raw_text, source_type)
+    template = choose_template(template_key, classification.key, source_type, custom_template)
     if settings.dry_run:
         return LLMResult(
             title="乾跑測試收件",
@@ -151,13 +177,15 @@ def organize(raw_text: str, source_type: str = "text") -> LLMResult:
             detail="這是 dry-run 測試內容。",
             tags=["dry-run"],
             provider="degraded",
+            template_key=template.key,
+            template_label=template.label,
             degraded=True,
         )
     try:
-        return call_gemini(raw_text, source_type, classification)
+        return call_gemini(raw_text, source_type, classification, template)
     except Exception:
         pass
     try:
-        return call_deepseek(raw_text, source_type, classification)
+        return call_deepseek(raw_text, source_type, classification, template)
     except Exception:
-        return fallback_result(raw_text, classification)
+        return fallback_result(raw_text, classification, template)

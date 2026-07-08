@@ -2,6 +2,8 @@
 
 LINE 當入口,把使用者傳來的文字/網址交給 Gemini 優先整理,DeepSeek 備援,最後寫進 Notion database。
 
+產品定位是「LINE Keep 的 AI 版」:使用者把資料丟給 LINE OA,系統依使用者指定的格式整理、分類,再寫進 Notion。Telegram+Obsidian 是私人工作流;這個專案是一般 user-facing 的 LINE+Notion 收件產品。
+
 ## 系統能力
 
 - LINE webhook 簽章驗證
@@ -10,13 +12,39 @@ LINE 當入口,把使用者傳來的文字/網址交給 Gemini 優先整理,Deep
 - message key 去重,避免 LINE 重送造成 Notion 重複寫入
 - Gemini 優先整理,DeepSeek 備援
 - AI 全失敗時 degraded 保存原文
+- 每位 LINE 使用者可設定預設整理格式
+- 支援自動、文章、地點、讀書、任務、收藏與自訂格式
 - Notion database properties + page body 同步寫入
+- Notion Portal 依 Obsidian folder routing 顯示分類入口
 - 瀏覽器管理頁 `/`
 - 狀態 API `/api/status`
 - 最近紀錄 API `/api/captures`
 - dry-run 模式與 browser debug form
 
-白話:這已經不是只會收一則訊息的 MVP,而是一個有狀態、有去重、有觀測頁的 production v1。
+白話:這不是只會收一則訊息的 demo,而是一個有狀態、有去重、有格式偏好、有觀測頁的 production v1。
+
+## 使用者在 LINE 裡怎麼用
+
+一般使用:
+
+```text
+直接把文字、網址、想法、清單丟給 Kevin Capture
+```
+
+設定整理格式:
+
+```text
+設定
+格式 自動
+格式 文章
+格式 地點
+格式 讀書
+格式 任務
+格式 收藏
+格式 自訂 請整理成三段：背景、重點、我下一步要做什麼
+```
+
+白話:使用者不用知道 webhook、Render、Notion API;他只要像用 LINE Keep 一樣丟資料,必要時用「格式」改整理樣式。
 
 ## 已建立的 Notion database
 
@@ -27,7 +55,7 @@ LINE 當入口,把使用者傳來的文字/網址交給 Gemini 優先整理,Deep
 
 你仍需要在 Notion 建立一個 integration,取得 `NOTION_TOKEN`,並把 `LINE Capture Inbox` 分享給該 integration。
 
-Portal 已依照原本 Obsidian folder routing 建出分類頁。每則 LINE 新資料寫入 Inbox 後,也會自動在對應分類頁追加一筆索引。
+Portal 已依照原本 Obsidian folder routing 建出分類頁。每則 LINE 新資料寫入 Inbox 後,也會自動在對應分類頁追加一筆索引。分類頁已清掉 scaffold 說明文字,保留一句用途說明與資料視圖。
 
 ## 本機啟動
 
@@ -108,6 +136,17 @@ https://你的網域/line/webhook
 10. SQLite 狀態改為 `completed`
 11. Bot 先回「收到」,完成後用 LINE push 主動通知「已整理完成」
 12. 失敗時 SQLite 狀態改為 `failed`,並保存錯誤訊息
+
+## 待補到真正多使用者版
+
+目前 production v1 使用一組全域 Notion token/database,適合先讓你和第一批朋友使用。若要變成每個人自己的 LINE Keep replacement,下一階段要補:
+
+- 每位 LINE user 的 Notion OAuth 或安全 token 綁定
+- 每位 user 自己的 Notion database / Portal
+- 自訂格式規則的加密保存與管理頁
+- LINE rich menu 或 LIFF 設定頁
+
+白話:現在已經可以開始用,但還不是「每個朋友都接到自己的 Notion」的完整 SaaS 型態。
 
 ## LINE OA 回應設定
 
