@@ -103,8 +103,12 @@ https://你的網域/line/webhook
 8. 兩者都失敗則以 `degraded` 保存原文
 9. 寫入 Notion
 10. SQLite 狀態改為 `completed`
-11. Bot 回「已整理完成」
+11. Bot 先回「收到」,完成後用 LINE push 主動通知「已整理完成」
 12. 失敗時 SQLite 狀態改為 `failed`,並保存錯誤訊息
+
+## LINE OA 回應設定
+
+LINE Official Account Manager 的 `設定 -> 回應設定` 要關掉 `自動回應訊息` 與 `AI 回應訊息`,並開啟 `Webhook`。否則 LINE 會額外發出預設罐頭訊息,干擾真正的整理流程。
 
 白話:這條線是一般 user-facing 收件系統,不要和你的私人 Telegram+Obsidian 混在一起。
 

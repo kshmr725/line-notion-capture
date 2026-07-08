@@ -22,11 +22,50 @@ def test_create_capture_page_uses_database_id(monkeypatch):
         captured["timeout"] = timeout
         return Response()
 
+    def fake_get(url, headers, timeout):
+        captured["get_url"] = url
+
+        class GetResponse:
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return {
+                    "properties": {
+                        "Name": {},
+                        "Status": {},
+                        "Category": {},
+                        "Source User": {},
+                        "Source Type": {},
+                        "Raw Input": {},
+                        "Summary": {},
+                        "Tags": {},
+                        "AI Provider": {},
+                        "LINE Message ID": {},
+                        "Created At": {},
+                    }
+                }
+
+        return GetResponse()
+
+    def fake_patch(url, headers, json, timeout):
+        captured["patch_json"] = json
+        return Response()
+
+    monkeypatch.setattr(notion_writer.requests, "get", fake_get)
+    monkeypatch.setattr(notion_writer.requests, "patch", fake_patch)
     monkeypatch.setattr(notion_writer.requests, "post", fake_post)
     result = LLMResult(
         title="測試",
         summary="摘要",
-        category="Inbox",
+        category="收件匣",
+        folder="00_Inbox_收件匣",
+        category_key="inbox",
+        category_reason="default",
+        what="這是什麼",
+        key_point="重點",
+        action="下一步",
+        detail="- 第一點\n- 第二點",
         tags=["tag"],
         provider="gemini",
     )
@@ -36,8 +75,8 @@ def test_create_capture_page_uses_database_id(monkeypatch):
     assert url == "https://notion.example/page"
     assert captured["json"]["parent"] == {"database_id": "db123"}
     child_types = [child["type"] for child in captured["json"]["children"]]
-    assert child_types == ["heading_2", "paragraph", "heading_2", "paragraph", "heading_2", "paragraph"]
-    assert captured["json"]["children"][0]["heading_2"]["rich_text"][0]["text"]["content"] == "摘要"
+    assert child_types[:6] == ["callout", "callout", "callout", "callout", "divider", "heading_2"]
+    assert captured["json"]["children"][0]["callout"]["rich_text"][0]["text"]["content"].startswith("分類：")
 
 
 def test_create_capture_page_dry_run_does_not_call_notion(monkeypatch):
@@ -50,7 +89,14 @@ def test_create_capture_page_dry_run_does_not_call_notion(monkeypatch):
     result = LLMResult(
         title="測試",
         summary="摘要",
-        category="Inbox",
+        category="收件匣",
+        folder="00_Inbox_收件匣",
+        category_key="inbox",
+        category_reason="default",
+        what="這是什麼",
+        key_point="重點",
+        action="下一步",
+        detail="- 第一點",
         tags=[],
         provider="degraded",
     )

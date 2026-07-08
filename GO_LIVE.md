@@ -135,7 +135,28 @@ Use webhook=Enabled
 
 白話:這是 LINE 把朋友訊息送到你的服務的入口。
 
-## Step 8: 驗收
+## Step 8: 關掉 LINE 預設自動回覆
+
+在 LINE Official Account Manager:
+
+```text
+設定 -> 回應設定
+```
+
+請確認:
+
+```text
+Webhook: 啟用
+自動回應訊息: 關閉
+AI 回應訊息: 關閉
+加入好友的歡迎訊息: 可保留,但建議改成「傳文字/網址給我，我會整理到 Notion」
+```
+
+如果沒有關掉「自動回應訊息」,使用者傳訊息後會先看到 LINE 內建的「很抱歉，本帳號無法個別回覆用戶的訊息」,這不是 Render 程式發的。
+
+白話:LINE OA 後台自己也會發罐頭訊息；我們要讓 Render bot 成為唯一回覆來源。
+
+## Step 9: 驗收
 
 本機或 Render shell 跑:
 
@@ -150,4 +171,3 @@ python scripts/verify_go_live.py https://你的-render-url
 - Notion token/database OK
 - 手機加入 LINE OA 後傳一則文字
 - Notion database 出現新資料
-

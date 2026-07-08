@@ -4,11 +4,13 @@ from llm_router import fallback_result, parse_llm_json
 
 def test_parse_llm_json():
     result = parse_llm_json(
-        '{"title":"買咖啡豆","summary":"提醒購買咖啡豆","category":"Task","tags":["todo","life"]}',
+        '{"title":"買咖啡豆","summary":"提醒購買咖啡豆","what":"購物提醒","key_point":"咖啡豆快用完","action":"下次補貨","detail_points":["買咖啡豆"],"tags":["todo","life"]}',
         "gemini",
     )
     assert result.title == "買咖啡豆"
-    assert result.category == "Task"
+    assert result.category == "美食與咖啡地圖"
+    assert result.folder == "71_Food_美食與咖啡地圖"
+    assert result.action == "下次補貨"
     assert result.tags == ["todo", "life"]
     assert result.provider == "gemini"
 
@@ -17,7 +19,7 @@ def test_fallback_result():
     result = fallback_result("hello world")
     assert result.provider == "degraded"
     assert result.degraded
-    assert result.category == "Inbox"
+    assert result.category == "收件匣"
 
 
 def test_organize_dry_run_does_not_call_providers(monkeypatch):
@@ -33,3 +35,12 @@ def test_organize_dry_run_does_not_call_providers(monkeypatch):
 
     assert result.provider == "degraded"
     assert result.tags == ["dry-run"]
+
+
+def test_organize_dry_run_uses_deterministic_category(monkeypatch):
+    monkeypatch.setattr(llm_router.settings, "dry_run", True)
+
+    result = llm_router.organize("WHO healthy diet nutrition", "url")
+
+    assert result.category == "健身與健康"
+    assert result.folder == "73_Fitness_健身與健康"

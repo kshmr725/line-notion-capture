@@ -9,7 +9,7 @@ from flask import Flask, jsonify, render_template_string, request
 
 import capture_store
 from config import settings
-from line_client import reply_text, verify_signature
+from line_client import push_text, reply_text, verify_signature
 from llm_router import organize
 from notion_writer import create_capture_page
 
@@ -136,21 +136,22 @@ def line_webhook():
         if event.get("type") != "message":
             continue
         reply_token = event.get("replyToken", "")
+        source_user = source_user_from_event(event)
         try:
-            reply_text(reply_token, "收到，正在整理到 Notion...")
+            reply_text(reply_token, "收到，我正在整理成 Notion 筆記。完成後會再通知你。")
             processed = process_message_event(event)
             prefix = "這則已整理過" if processed["status"] == "duplicate_completed" else "已整理完成"
-            done = f"{prefix}\n{processed['title']}\n分類:{processed['category']}\nAI:{processed['provider']}"
+            done = f"✅ {prefix}\n\n📌 {processed['title']}\n📂 分類：{processed['category']}\n🤖 AI：{processed['provider']}"
             if processed["notion_url"]:
-                done += f"\n{processed['notion_url']}"
-            reply_text(reply_token, done)
+                done += f"\n\n在 Notion 打開：\n{processed['notion_url']}"
+            push_text(source_user, done)
         except Exception as exc:
             try:
                 _, _, message_key = extract_text_event(event)
                 capture_store.mark_failed(message_key, f"{type(exc).__name__}: {exc}")
             except Exception:
                 pass
-            reply_text(reply_token, f"已收到，但整理失敗，請稍後再試。\n{type(exc).__name__}")
+            push_text(source_user, f"⚠️ 已收到，但整理失敗，請稍後再試。\n{type(exc).__name__}")
     return jsonify({"status": "ok"})
 
 
