@@ -15,7 +15,7 @@ LINE 當入口,把使用者傳來的文字/網址交給 Gemini 優先整理,Deep
 - 每位 LINE 使用者可設定預設整理格式
 - 支援自動、文章、地點、讀書、任務、收藏與自訂格式
 - Notion database properties + page body 同步寫入
-- Notion Portal 依 Obsidian folder routing 顯示分類入口
+- Notion Dashboard 復刻 My Dashboard 版型,並接上 Inbox、分類看板與收件日曆
 - 瀏覽器管理頁 `/`
 - 狀態 API `/api/status`
 - 最近紀錄 API `/api/captures`
@@ -46,16 +46,17 @@ LINE 當入口,把使用者傳來的文字/網址交給 Gemini 優先整理,Deep
 
 白話:使用者不用知道 webhook、Render、Notion API;他只要像用 LINE Keep 一樣丟資料,必要時用「格式」改整理樣式。
 
-## 已建立的 Notion database
+## 已建立的 Notion workspace
 
-- Portal: https://app.notion.com/p/397ca826929a81b6aa12c04ce5c51168
+- Dashboard: https://app.notion.com/p/397ca826929a811cb2c1f7e35e09b372
+- 舊版 Portal: https://app.notion.com/p/397ca826929a81b6aa12c04ce5c51168
 - Database: `LINE Capture Inbox`
 - Database ID: `1b8c5d8e33cc416ca86f75e04cb15c40`
 - Data source ID: `544d588a-ca4e-44af-86dc-f3ea85fba8ba`
 
 你仍需要在 Notion 建立一個 integration,取得 `NOTION_TOKEN`,並把 `LINE Capture Inbox` 分享給該 integration。
 
-Portal 已依照原本 Obsidian folder routing 建出分類頁。每則 LINE 新資料寫入 Inbox 後,也會自動在對應分類頁追加一筆索引。分類頁已清掉 scaffold 說明文字,保留一句用途說明與資料視圖。
+Dashboard 已依照使用者指定的 `My Dashboard` 模板重建:上方是 LINE Keep 式操作區,中段是格式分類說明,下方直接嵌入同一個 `LINE Capture Inbox` 的最新收件、分類看板與收件日曆。舊版 Portal 保留作為 archive 與分類頁索引,頁首已加新版 Dashboard 連結。
 
 ## 本機啟動
 

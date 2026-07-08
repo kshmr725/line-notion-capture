@@ -4,7 +4,8 @@ from dataclasses import dataclass
 
 
 PORTAL_PAGE_ID = "397ca826-929a-81b6-aa12-c04ce5c51168"
-PORTAL_URL = "https://app.notion.com/p/397ca826929a81b6aa12c04ce5c51168"
+DASHBOARD_PAGE_ID = "397ca826-929a-811c-b2c1-f7e35e09b372"
+PORTAL_URL = "https://app.notion.com/p/397ca826929a811cb2c1f7e35e09b372"
 
 
 @dataclass(frozen=True)
