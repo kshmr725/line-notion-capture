@@ -8,8 +8,9 @@ def test_parse_llm_json():
         "gemini",
     )
     assert result.title == "買咖啡豆"
-    assert result.category == "美食與咖啡地圖"
-    assert result.folder == "71_Food_美食與咖啡地圖"
+    assert result.category == "任務待辦"
+    assert result.folder == "20_Tasks_任務待辦"
+    assert result.category_icon == "✅"
     assert result.action == "下次補貨"
     assert result.tags == ["todo", "life"]
     assert result.provider == "gemini"

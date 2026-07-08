@@ -93,6 +93,9 @@ def _patch_database_properties(properties: dict) -> None:
         "Format": {"select": {}},
         "Action": {"rich_text": {}},
         "Key Point": {"rich_text": {}},
+        "Visual Category": {"select": {}},
+        "Cover Image": {"url": {}},
+        "Icon": {"rich_text": {}},
     }
     missing = {name: config for name, config in desired.items() if name not in properties}
     if not missing:
@@ -150,6 +153,9 @@ def create_capture_page(
         "LINE Message ID": {"rich_text": [{"text": {"content": line_message_id[:200]}}]},
         "Created At": {"date": {"start": created_at.isoformat()}},
     }
+    category_icon = getattr(result, "category_icon", "📥") or "📥"
+    cover_url = getattr(result, "category_cover_url", "") or ""
+    visual_group = getattr(result, "visual_group", result.category) or result.category
     optional_properties = {
         "Folder": _optional_rich_text(result.folder),
         "Category Reason": _optional_rich_text(result.category_reason),
@@ -160,6 +166,9 @@ def create_capture_page(
         "Format": _optional_select(result.template_label),
         "Action": _optional_rich_text(result.action),
         "Key Point": _optional_rich_text(result.key_point),
+        "Visual Category": _optional_select(f"{category_icon} {visual_group}"),
+        "Cover Image": {"url": cover_url} if cover_url else {"url": None},
+        "Icon": _optional_rich_text(category_icon),
     }
     for name, value in optional_properties.items():
         if name in database_properties:
@@ -168,8 +177,8 @@ def create_capture_page(
         properties["Attachment URL"] = {"url": attachment_url}
     children = [
         _callout(
-            f"分類：{result.category} / {result.folder}\n格式：{result.template_label}\n依據：{result.category_reason}",
-            "📂",
+            f"{category_icon} {result.category}\n格式：{result.template_label}\n放在：{result.folder}\n依據：{result.category_reason}",
+            category_icon,
         ),
         _callout(f"分類入口：{category_page.title}\n{category_page.url}", "🧭"),
         _callout(result.what or result.summary or "已收進 Notion。", "📌"),
@@ -185,14 +194,17 @@ def create_capture_page(
             _heading("原始訊息"),
             _paragraph(raw_input),
             _heading("來源資訊"),
-            _paragraph(f"source_user: {source_user}\nsource_type: {source_type}\nai_provider: {result.provider}"),
+            _paragraph(f"來源：LINE\n資料類型：{source_type}\n建立時間：{created_at.astimezone().strftime('%Y-%m-%d %H:%M')}"),
         ]
     )
     payload = {
         "parent": {"database_id": settings.notion_database_id},
+        "icon": {"type": "emoji", "emoji": category_icon},
         "properties": properties,
         "children": children,
     }
+    if cover_url:
+        payload["cover"] = {"type": "external", "external": {"url": cover_url}}
     resp = requests.post("https://api.notion.com/v1/pages", json=payload, headers=_headers(), timeout=30)
     resp.raise_for_status()
     notion_url = resp.json().get("url", "")

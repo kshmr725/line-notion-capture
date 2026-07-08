@@ -106,6 +106,8 @@ def choose_template(requested_key: str, category_key: str, source_type: str, cus
         return TEMPLATES["place"]
     if category_key == "reading":
         return TEMPLATES["reading"]
+    if category_key == "task":
+        return TEMPLATES["task"]
     if source_type == "url":
         return TEMPLATES["article"]
     return TEMPLATES["keep"]

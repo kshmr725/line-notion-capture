@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 import time
-from urllib.parse import urljoin
+from urllib.parse import quote, urljoin
 
 from flask import Flask, jsonify, render_template_string, request
 
@@ -57,10 +57,22 @@ def api_captures():
 
 
 @app.get("/")
+def landing():
+    add_line_url = "https://line.me/R/ti/p/@658husbm"
+    notion_url = "https://app.notion.com/p/397ca826929a811cb2c1f7e35e09b372"
+    return render_template_string(
+        LANDING_HTML,
+        add_line_url=add_line_url,
+        notion_url=notion_url,
+        qr_url=f"https://api.qrserver.com/v1/create-qr-code/?size=220x220&data={quote(add_line_url, safe='')}",
+    )
+
+
+@app.get("/admin")
 def dashboard():
     webhook_url = urljoin(request.host_url, "line/webhook")
     return render_template_string(
-        DASHBOARD_HTML,
+        ADMIN_DASHBOARD_HTML,
         dry_run="ON" if app.config.get("DRY_RUN_VISIBLE") else "OFF",
         webhook_url=webhook_url,
     )
@@ -127,6 +139,7 @@ def process_message_event(event: dict[str, Any]) -> dict[str, str]:
             "title": record.title,
             "category": record.category,
             "provider": record.provider,
+            "template": "",
             "notion_url": record.notion_url,
             "status": "duplicate_completed",
         }
@@ -180,17 +193,21 @@ def line_webhook():
                 if command_reply:
                     reply_text(reply_token, command_reply)
                     continue
-            reply_text(reply_token, "收到，我正在整理成 Notion 筆記。完成後會再通知你。")
+            reply_text(reply_token, "收到，我正在整理成你的 Notion 筆記。完成後會把連結傳給你。")
             processed = process_message_event(event)
             prefix = "這則已整理過" if processed["status"] == "duplicate_completed" else "已整理完成"
+            template_line = (
+                "\n🧩 格式：沿用原筆記"
+                if processed["status"] == "duplicate_completed"
+                else f"\n🧩 格式：{processed.get('template') or 'Keep 快速收藏'}"
+            )
             done = (
                 f"✅ {prefix}\n\n📌 {processed['title']}"
                 f"\n📂 分類：{processed['category']}"
-                f"\n🧩 格式：{processed.get('template') or '自動判斷'}"
-                f"\n🤖 AI：{processed['provider']}"
+                f"{template_line}"
             )
             if processed["notion_url"]:
-                done += f"\n\n在 Notion 打開：\n{processed['notion_url']}"
+                done += f"\n\n打開筆記：\n{processed['notion_url']}"
             push_text(source_user, done)
         except Exception as exc:
             try:
@@ -219,7 +236,154 @@ def debug_simulate():
     return jsonify({"status": "ok", "result": process_message_event(event)})
 
 
-DASHBOARD_HTML = """
+LANDING_HTML = """
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kevin Capture</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f2ed;
+      --ink: #202124;
+      --muted: #68645d;
+      --line: #d7d1c5;
+      --paper: #fffdf8;
+      --accent: #0f8f5f;
+      --accent-dark: #0a6f4a;
+      --soft: #e5f3ec;
+      --amber: #f4df9c;
+      --blue: #d9e7f7;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); }
+    a { color: inherit; }
+    .wrap { width: min(1120px, calc(100% - 32px)); margin: 0 auto; }
+    header { padding: 18px 0; border-bottom: 1px solid var(--line); background: rgba(244, 242, 237, .92); position: sticky; top: 0; z-index: 2; }
+    nav { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 760; }
+    .mark { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: #121212; color: #fff; }
+    .navlinks { display: flex; align-items: center; gap: 10px; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid var(--line); text-decoration: none; font-weight: 700; white-space: nowrap; }
+    .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .btn.primary:hover { background: var(--accent-dark); }
+    .hero { display: grid; grid-template-columns: minmax(0, 1.1fr) 360px; gap: 42px; align-items: center; padding: 64px 0 44px; }
+    h1 { margin: 0; font-size: clamp(40px, 6vw, 72px); line-height: .98; letter-spacing: 0; max-width: 760px; }
+    .lead { max-width: 620px; margin: 22px 0 0; color: var(--muted); font-size: 19px; line-height: 1.55; }
+    .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
+    .qr-card { background: var(--paper); border: 1px solid var(--line); border-radius: 18px; padding: 22px; box-shadow: 0 16px 48px rgba(45, 40, 30, .08); }
+    .qr-card img { display: block; width: 220px; height: 220px; margin: 0 auto; border-radius: 12px; }
+    .qr-card strong { display: block; margin-top: 16px; font-size: 18px; }
+    .qr-card p { margin: 8px 0 0; color: var(--muted); line-height: 1.5; }
+    .band { margin: 20px 0 52px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+    .step, .format, .note { background: var(--paper); border: 1px solid var(--line); border-radius: 16px; padding: 18px; }
+    .step b, .format b { display: block; margin-bottom: 8px; }
+    .step p, .format p, .note p { margin: 0; color: var(--muted); line-height: 1.55; }
+    section { padding: 20px 0 44px; }
+    h2 { font-size: clamp(28px, 4vw, 44px); margin: 0 0 16px; letter-spacing: 0; }
+    .formats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+    .format { min-height: 156px; }
+    .format .icon { font-size: 30px; margin-bottom: 14px; }
+    .format:nth-child(1) { background: var(--soft); }
+    .format:nth-child(2) { background: #fff7dd; }
+    .format:nth-child(3) { background: var(--blue); }
+    .format:nth-child(4) { background: #f2e8ff; }
+    .sample { display: grid; grid-template-columns: .95fr 1.05fr; gap: 18px; align-items: stretch; margin-top: 18px; }
+    .phone, .notion { border: 1px solid var(--line); border-radius: 18px; background: var(--paper); padding: 20px; }
+    .bubble { max-width: 92%; border-radius: 18px; padding: 13px 15px; margin: 10px 0; line-height: 1.5; }
+    .bubble.me { margin-left: auto; background: #d8f7ce; }
+    .bubble.bot { background: #f0eee9; }
+    .notion-row { display: grid; grid-template-columns: 42px 1fr; gap: 12px; align-items: start; border-top: 1px solid var(--line); padding-top: 14px; margin-top: 14px; }
+    .tile-icon { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; background: var(--soft); font-size: 24px; }
+    footer { border-top: 1px solid var(--line); padding: 24px 0 36px; color: var(--muted); }
+    @media (max-width: 860px) {
+      header { position: static; }
+      nav { align-items: flex-start; }
+      .navlinks { flex-direction: column; align-items: stretch; }
+      .hero, .sample { grid-template-columns: 1fr; }
+      .band, .formats { grid-template-columns: 1fr; }
+      .qr-card img { width: 190px; height: 190px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <nav class="wrap">
+      <div class="brand"><span class="mark">KC</span><span>Kevin Capture</span></div>
+      <div class="navlinks">
+        <a class="btn" href="{{ notion_url }}" target="_blank" rel="noreferrer">打開資料庫</a>
+        <a class="btn primary" href="{{ add_line_url }}" target="_blank" rel="noreferrer">加入 LINE</a>
+      </div>
+    </nav>
+  </header>
+  <main class="wrap">
+    <section class="hero">
+      <div>
+        <h1>把 LINE 當成會整理的 Keep</h1>
+        <p class="lead">丟網址、文字、想法或待辦進來。系統會整理成你的格式，分類放進 Notion。</p>
+        <div class="hero-actions">
+          <a class="btn primary" href="{{ add_line_url }}" target="_blank" rel="noreferrer">加入 Kevin Capture</a>
+          <a class="btn" href="{{ notion_url }}" target="_blank" rel="noreferrer">看 Notion 入口</a>
+        </div>
+      </div>
+      <aside class="qr-card">
+        <img src="{{ qr_url }}" alt="加入 Kevin Capture 的 LINE QR code">
+        <strong>LINE ID：@658husbm</strong>
+        <p>掃碼或按加入。傳一則訊息後，完成時會收到 Notion 筆記連結。</p>
+      </aside>
+    </section>
+    <div class="band">
+      <div class="step"><b>1. 傳進 LINE</b><p>像用 Keep 一樣，不用先想分類。</p></div>
+      <div class="step"><b>2. 自動整理</b><p>依內容選文章、地點、讀書、任務或快速收藏。</p></div>
+      <div class="step"><b>3. 回到 Notion</b><p>每筆資料有分類、摘要、下一步和入口連結。</p></div>
+    </div>
+    <section>
+      <h2>資料會長成不同卡片</h2>
+      <div class="formats">
+        <div class="format"><div class="icon">🧾</div><b>文章摘要</b><p>新聞、研究、網頁整理成重點、證據和行動建議。</p></div>
+        <div class="format"><div class="icon">☕</div><b>地點卡片</b><p>餐廳、咖啡、景點優先看地址、時間、價位和適合情境。</p></div>
+        <div class="format"><div class="icon">📚</div><b>讀書筆記</b><p>書籍、影片或學習資料保留核心概念與閱讀進度。</p></div>
+        <div class="format"><div class="icon">✅</div><b>任務待辦</b><p>買東西、訂位、確認預算會被整理成可執行事項。</p></div>
+      </div>
+    </section>
+    <section>
+      <h2>實際使用感</h2>
+      <div class="sample">
+        <div class="phone">
+          <div class="bubble me">幫我記：週末找台北安靜咖啡廳，適合討論專案，預算每人 300 內。</div>
+          <div class="bubble bot">收到，我正在整理成你的 Notion 筆記。完成後會把連結傳給你。</div>
+          <div class="bubble bot">✅ 已整理完成<br><br>📌 週末台北咖啡廳清單<br>📂 分類：美食與咖啡地圖<br>🧩 格式：地點卡片</div>
+        </div>
+        <div class="notion">
+          <strong>Notion 裡會看到</strong>
+          <div class="notion-row">
+            <div class="tile-icon">☕</div>
+            <div><b>週末台北咖啡廳清單</b><p>分類：地點地圖。重點：安靜、可討論、預算 300 內。下一步：挑 3 家並確認營業時間。</p></div>
+          </div>
+          <div class="notion-row">
+            <div class="tile-icon">✅</div>
+            <div><b>生日禮物與訂位待辦</b><p>分類：待處理。重點：買禮物、訂餐廳、確認預算。下一步：今天先確定預算上限。</p></div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="note">
+      <b>可以自己改格式</b>
+      <p>在 LINE 傳「格式 文章」「格式 地點」「格式 任務」即可切換。也可以傳「格式 自訂 請整理成背景、重點、下一步」。</p>
+    </section>
+  </main>
+  <footer>
+    <div class="wrap">Kevin Capture 會把你傳入的資料整理到已連接的 Notion。朋友使用前，請先確認資料要進哪個 Notion workspace。</div>
+  </footer>
+</body>
+</html>
+"""
+
+
+ADMIN_DASHBOARD_HTML = """
 <!doctype html>
 <html lang="zh-Hant">
 <head>

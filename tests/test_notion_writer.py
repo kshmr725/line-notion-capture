@@ -44,6 +44,9 @@ def test_create_capture_page_uses_database_id(monkeypatch):
                         "LINE Message ID": {},
                         "Created At": {},
                         "Format": {},
+                        "Visual Category": {},
+                        "Cover Image": {},
+                        "Icon": {},
                     }
                 }
 
@@ -69,6 +72,9 @@ def test_create_capture_page_uses_database_id(monkeypatch):
         detail="- 第一點\n- 第二點",
         tags=["tag"],
         provider="gemini",
+        category_icon="✅",
+        category_cover_url="https://example.com/tasks.jpg",
+        visual_group="待處理",
         template_key="article",
         template_label="文章摘要",
     )
@@ -79,10 +85,20 @@ def test_create_capture_page_uses_database_id(monkeypatch):
     assert captured["json"]["parent"] == {"database_id": "db123"}
     child_types = [child["type"] for child in captured["json"]["children"]]
     assert child_types[:7] == ["callout", "callout", "callout", "callout", "callout", "divider", "heading_2"]
-    assert captured["json"]["children"][0]["callout"]["rich_text"][0]["text"]["content"].startswith("分類：")
+    first_callout = captured["json"]["children"][0]["callout"]["rich_text"][0]["text"]["content"]
+    assert first_callout.startswith("✅ 收件匣")
+    assert "放在：00_Inbox_收件匣" in first_callout
     assert "分類入口" in captured["json"]["children"][1]["callout"]["rich_text"][0]["text"]["content"]
     assert captured["json"]["properties"]["Format"]["select"]["name"] == "文章摘要"
+    assert captured["json"]["icon"]["emoji"] == "✅"
+    assert captured["json"]["cover"]["external"]["url"] == "https://example.com/tasks.jpg"
+    assert captured["json"]["properties"]["Visual Category"]["select"]["name"] == "✅ 待處理"
+    assert captured["json"]["properties"]["Cover Image"]["url"] == "https://example.com/tasks.jpg"
+    assert captured["json"]["properties"]["Icon"]["rich_text"][0]["text"]["content"] == "✅"
     assert captured["json"]["properties"]["Category Page"]["url"].startswith("https://app.notion.com/p/")
+    source_block = captured["json"]["children"][-1]["paragraph"]["rich_text"][0]["text"]["content"]
+    assert "ai_provider" not in source_block
+    assert "來源：LINE" in source_block
     append_calls = [patch for patch in captured["patches"] if "/v1/blocks/" in patch["url"]]
     assert append_calls
     assert append_calls[0]["json"]["children"][0]["type"] == "bulleted_list_item"

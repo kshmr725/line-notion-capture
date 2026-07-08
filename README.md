@@ -15,8 +15,10 @@ LINE 當入口,把使用者傳來的文字/網址交給 Gemini 優先整理,Deep
 - 每位 LINE 使用者可設定預設整理格式
 - 支援自動、文章、地點、讀書、任務、收藏與自訂格式
 - Notion database properties + page body 同步寫入
-- Notion Dashboard 復刻 My Dashboard 版型,並接上 Inbox、分類看板與收件日曆
-- 瀏覽器管理頁 `/`
+- Notion Dashboard 復刻 My Dashboard 版型,並接上視覺圖庫、分類看板、時間段看板、收件日曆與收件總量
+- 每筆 Notion 筆記可帶 icon、cover image、visual category、format、time bucket
+- 使用者入口頁 `/`
+- 瀏覽器管理頁 `/admin`
 - 狀態 API `/api/status`
 - 最近紀錄 API `/api/captures`
 - dry-run 模式與 browser debug form
@@ -56,7 +58,17 @@ LINE 當入口,把使用者傳來的文字/網址交給 Gemini 優先整理,Deep
 
 你仍需要在 Notion 建立一個 integration,取得 `NOTION_TOKEN`,並把 `LINE Capture Inbox` 分享給該 integration。
 
-Dashboard 已依照使用者指定的 `My Dashboard` 模板重建:上方是 LINE Keep 式操作區,中段是格式分類說明,下方直接嵌入同一個 `LINE Capture Inbox` 的最新收件、分類看板與收件日曆。舊版 Portal 保留作為 archive 與分類頁索引,頁首已加新版 Dashboard 連結。
+Dashboard 已依照使用者指定的 `My Dashboard` 模板重建:上方是 LINE Keep 式操作區,中段是格式分類說明,下方直接嵌入同一個 `LINE Capture Inbox` 的最新收件、視覺圖庫、分類看板、時間段看板、收件日曆與收件總量。舊版 Portal 保留作為 archive 與分類頁索引,頁首已加新版 Dashboard 連結。
+
+新增的視覺欄位:
+
+- `Visual Category`: 用圖示加主題群組做圖庫/看板分類
+- `Cover Image`: 讓 gallery card 有封面圖
+- `Icon`: 保留分類圖示,方便掃讀
+- `Time Bucket`: 依收件時間分成早上、下午、晚上、深夜
+- `Format`: 顯示這筆資料用文章、地點、讀書、任務或收藏哪種格式整理
+
+白話:新的 Notion 不只是一張後台表格,而是能用封面、圖示、分類和時間去找資料的資料館。
 
 ## 本機啟動
 

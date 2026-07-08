@@ -29,6 +29,9 @@ class LLMResult:
     detail: str
     tags: list[str]
     provider: str
+    category_icon: str = "📥"
+    category_cover_url: str = ""
+    visual_group: str = "快速收件"
     template_key: str = "auto"
     template_label: str = "自動判斷"
     degraded: bool = False
@@ -49,6 +52,9 @@ def fallback_result(
         folder=classification.folder,
         category_key=classification.key,
         category_reason=classification.reason_text(),
+        category_icon=classification.icon,
+        category_cover_url=classification.cover_url,
+        visual_group=classification.visual_group,
         what=title or "LINE 收件",
         key_point="AI 目前不可用，已先保留原始內容。",
         action="稍後可以回來補整理，或重新傳送一次。",
@@ -93,6 +99,9 @@ def parse_llm_json(
         folder=classification.folder,
         category_key=classification.key,
         category_reason=classification.reason_text(),
+        category_icon=classification.icon,
+        category_cover_url=classification.cover_url,
+        visual_group=classification.visual_group,
         what=what,
         key_point=key_point,
         action=action,
@@ -171,6 +180,9 @@ def organize(
             folder=classification.folder,
             category_key=classification.key,
             category_reason=classification.reason_text(),
+            category_icon=classification.icon,
+            category_cover_url=classification.cover_url,
+            visual_group=classification.visual_group,
             what="LINE 測試訊息",
             key_point="正式環境會整理後寫入 Notion。",
             action="確認 LINE、Render、Notion 串接正常。",
