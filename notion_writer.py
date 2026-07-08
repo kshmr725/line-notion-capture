@@ -6,6 +6,7 @@ import requests
 
 from config import settings
 from llm_router import LLMResult
+from notion_portal import PORTAL_URL, category_page_for
 from taxonomy import time_bucket
 
 
@@ -85,6 +86,8 @@ def _patch_database_properties(properties: dict) -> None:
     desired = {
         "Folder": {"rich_text": {}},
         "Category Reason": {"rich_text": {}},
+        "Category Page": {"url": {}},
+        "Portal URL": {"url": {}},
         "Capture Date": {"date": {}},
         "Time Bucket": {"select": {}},
         "Action": {"rich_text": {}},
@@ -112,12 +115,14 @@ def create_capture_page(
     attachment_url: str = "",
 ) -> str:
     created_at = datetime.now(timezone.utc)
+    category_page = category_page_for(result.category_key)
     if settings.dry_run:
         print(
             "[NOTION DRY RUN page]",
             {
                 "title": result.title,
                 "category": result.category,
+                "category_page": category_page.url,
                 "source_user": source_user,
                 "source_type": source_type,
                 "raw_input": raw_input,
@@ -147,6 +152,8 @@ def create_capture_page(
     optional_properties = {
         "Folder": _optional_rich_text(result.folder),
         "Category Reason": _optional_rich_text(result.category_reason),
+        "Category Page": {"url": category_page.url},
+        "Portal URL": {"url": PORTAL_URL},
         "Capture Date": {"date": {"start": created_at.date().isoformat()}},
         "Time Bucket": _optional_select(time_bucket(created_at)),
         "Action": _optional_rich_text(result.action),
@@ -159,6 +166,7 @@ def create_capture_page(
         properties["Attachment URL"] = {"url": attachment_url}
     children = [
         _callout(f"分類：{result.category} / {result.folder}\n依據：{result.category_reason}", "📂"),
+        _callout(f"分類入口：{category_page.title}\n{category_page.url}", "🧭"),
         _callout(result.what or result.summary or "已收進 Notion。", "📌"),
         _callout(result.key_point or result.summary or "尚無重點。", "💡"),
         _callout(result.action or "先保留，之後可補上自己的判斷與下一步。", "⚡"),
@@ -182,4 +190,69 @@ def create_capture_page(
     }
     resp = requests.post("https://api.notion.com/v1/pages", json=payload, headers=_headers(), timeout=30)
     resp.raise_for_status()
-    return resp.json().get("url", "")
+    notion_url = resp.json().get("url", "")
+    _append_category_index(
+        page_id=category_page.page_id,
+        title=result.title,
+        category=result.category,
+        key_point=result.key_point or result.summary,
+        action=result.action,
+        notion_url=notion_url,
+        created_at=created_at,
+    )
+    return notion_url
+
+
+def _append_category_index(
+    page_id: str,
+    title: str,
+    category: str,
+    key_point: str,
+    action: str,
+    notion_url: str,
+    created_at: datetime,
+) -> None:
+    if not notion_url:
+        return
+    text = f"{created_at.astimezone().strftime('%Y-%m-%d %H:%M')}｜{category}｜{title[:80]}"
+    children = [
+        {
+            "object": "block",
+            "type": "bulleted_list_item",
+            "bulleted_list_item": {
+                "rich_text": [
+                    {"type": "text", "text": {"content": text, "link": {"url": notion_url}}},
+                ],
+                "children": [
+                    {
+                        "object": "block",
+                        "type": "bulleted_list_item",
+                        "bulleted_list_item": {
+                            "rich_text": [
+                                {"type": "text", "text": {"content": f"重點：{(key_point or '尚無重點')[:300]}"}}
+                            ]
+                        },
+                    },
+                    {
+                        "object": "block",
+                        "type": "bulleted_list_item",
+                        "bulleted_list_item": {
+                            "rich_text": [
+                                {"type": "text", "text": {"content": f"下一步：{(action or '先保留')[:300]}"}}
+                            ]
+                        },
+                    },
+                ],
+            },
+        }
+    ]
+    try:
+        response = requests.patch(
+            f"https://api.notion.com/v1/blocks/{page_id}/children",
+            headers=_headers(),
+            json={"children": children},
+            timeout=20,
+        )
+        response.raise_for_status()
+    except requests.RequestException:
+        pass

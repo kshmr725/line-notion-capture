@@ -20,11 +20,14 @@ LINE 當入口,把使用者傳來的文字/網址交給 Gemini 優先整理,Deep
 
 ## 已建立的 Notion database
 
+- Portal: https://app.notion.com/p/397ca826929a81b6aa12c04ce5c51168
 - Database: `LINE Capture Inbox`
 - Database ID: `1b8c5d8e33cc416ca86f75e04cb15c40`
 - Data source ID: `544d588a-ca4e-44af-86dc-f3ea85fba8ba`
 
 你仍需要在 Notion 建立一個 integration,取得 `NOTION_TOKEN`,並把 `LINE Capture Inbox` 分享給該 integration。
+
+Portal 已依照原本 Obsidian folder routing 建出分類頁。每則 LINE 新資料寫入 Inbox 後,也會自動在對應分類頁追加一筆索引。
 
 ## 本機啟動
 

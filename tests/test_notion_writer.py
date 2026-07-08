@@ -49,7 +49,7 @@ def test_create_capture_page_uses_database_id(monkeypatch):
         return GetResponse()
 
     def fake_patch(url, headers, json, timeout):
-        captured["patch_json"] = json
+        captured.setdefault("patches", []).append({"url": url, "json": json})
         return Response()
 
     monkeypatch.setattr(notion_writer.requests, "get", fake_get)
@@ -75,8 +75,13 @@ def test_create_capture_page_uses_database_id(monkeypatch):
     assert url == "https://notion.example/page"
     assert captured["json"]["parent"] == {"database_id": "db123"}
     child_types = [child["type"] for child in captured["json"]["children"]]
-    assert child_types[:6] == ["callout", "callout", "callout", "callout", "divider", "heading_2"]
+    assert child_types[:7] == ["callout", "callout", "callout", "callout", "callout", "divider", "heading_2"]
     assert captured["json"]["children"][0]["callout"]["rich_text"][0]["text"]["content"].startswith("分類：")
+    assert "分類入口" in captured["json"]["children"][1]["callout"]["rich_text"][0]["text"]["content"]
+    assert captured["json"]["properties"]["Category Page"]["url"].startswith("https://app.notion.com/p/")
+    append_calls = [patch for patch in captured["patches"] if "/v1/blocks/" in patch["url"]]
+    assert append_calls
+    assert append_calls[0]["json"]["children"][0]["type"] == "bulleted_list_item"
 
 
 def test_create_capture_page_dry_run_does_not_call_notion(monkeypatch):
