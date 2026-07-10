@@ -43,6 +43,16 @@ def test_admin_dashboard_shows_webhook_url():
     assert b"/line/webhook" in response.data
 
 
+def test_admin_dashboard_shows_line_oa_reply_checklist():
+    client = app.test_client()
+    response = client.get("/admin")
+    assert response.status_code == 200
+    assert "LINE OA 回覆檢查".encode() in response.data
+    assert "自動回應訊息".encode() in response.data
+    assert "AI 聊天機器人".encode() in response.data
+    assert "很抱歉，本帳號無法個別回覆".encode() in response.data
+
+
 def test_debug_simulate_requires_dry_run(monkeypatch):
     app.config["DRY_RUN_VISIBLE"] = False
     response = app.test_client().post("/debug/simulate", json={"text": "hello"})

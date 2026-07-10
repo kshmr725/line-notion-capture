@@ -398,6 +398,13 @@ ADMIN_DASHBOARD_HTML = """
     p { line-height: 1.65; }
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-top: 24px; }
     .panel { background: #fff; border: 1px solid #dedad1; border-radius: 8px; padding: 18px; }
+    .warning { border-color: #e5b66c; background: #fff7e6; }
+    .checklist { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+    .checklist li { display: grid; grid-template-columns: 34px 1fr; gap: 10px; align-items: start; padding: 10px; border: 1px solid #eadfcf; border-radius: 8px; background: #fff; }
+    .badge { width: 28px; height: 28px; border-radius: 999px; display: grid; place-items: center; font-weight: 800; }
+    .on { background: #dff6e6; color: #126b35; }
+    .off { background: #ffe2dc; color: #9b2718; }
+    .muted { color: #6f685d; font-size: 14px; }
     .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
     .stat { border: 1px solid #e5ded2; border-radius: 8px; padding: 12px; background: #fbfaf7; }
     .stat strong { display: block; font-size: 24px; margin-top: 4px; }
@@ -424,6 +431,16 @@ ADMIN_DASHBOARD_HTML = """
         <p>DRY_RUN: <code>{{ dry_run }}</code></p>
         <p>Webhook URL:<br><code>{{ webhook_url }}</code></p>
         <div class="stats" id="stats"></div>
+      </section>
+      <section class="panel warning">
+        <h2>LINE OA 回覆檢查</h2>
+        <p class="muted">如果使用者看到「很抱歉，本帳號無法個別回覆用戶的訊息」，那是 LINE OA 後台自動訊息，不是這個 Render webhook 發的。</p>
+        <ul class="checklist">
+          <li><span class="badge on">開</span><div><b>Webhook</b><br><span class="muted">設定 -> 回應設定 -> Webhook 必須啟用。</span></div></li>
+          <li><span class="badge off">關</span><div><b>自動回應訊息</b><br><span class="muted">必須關閉，否則 LINE 會插入罐頭回覆。</span></div></li>
+          <li><span class="badge off">關</span><div><b>AI 聊天機器人 / AI 回應訊息</b><br><span class="muted">不要建立、不要啟用；Gemini/DeepSeek 已經由本系統處理。</span></div></li>
+          <li><span class="badge off">關</span><div><b>聊天室手動接待插話</b><br><span class="muted">若還出現罐頭訊息，請到「聊天 / 回應設定」確認沒有手動接待或無法回覆訊息在作用。</span></div></li>
+        </ul>
       </section>
       <section class="panel">
         <h2>Browser Dry Run</h2>

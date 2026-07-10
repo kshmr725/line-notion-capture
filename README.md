@@ -165,6 +165,17 @@ https://你的網域/line/webhook
 
 LINE Official Account Manager 的 `設定 -> 回應設定` 要關掉 `自動回應訊息` 與 `AI 回應訊息`,並開啟 `Webhook`。否則 LINE 會額外發出預設罐頭訊息,干擾真正的整理流程。
 
+請不要使用 LINE OA 內建的 `AI 聊天機器人 (β)`。這個專案已經在 Render webhook 裡呼叫 Gemini/DeepSeek;如果再開 LINE 內建 AI,使用者會收到兩套系統的回覆,而且可能再次出現「本帳號無法個別回覆」這類 LINE 罐頭訊息。
+
+建議檢查清單:
+
+```text
+Webhook: 開啟
+自動回應訊息: 關閉
+AI 回應訊息 / AI 聊天機器人: 關閉
+歡迎訊息: 可保留,但只用來說明「傳資料給我,我會整理到 Notion」
+```
+
 白話:這條線是一般 user-facing 收件系統,不要和你的私人 Telegram+Obsidian 混在一起。
 
 ## 狀態欄位
