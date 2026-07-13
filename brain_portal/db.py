@@ -1,15 +1,19 @@
 from __future__ import annotations
 
+import hashlib
 import json
+import math
 import os
+import re
 import sqlite3
 from pathlib import Path
 from typing import Sequence, Union
 
-from brain_portal.models import KnowledgeItem
+from brain_portal.models import KnowledgeItem, SearchHit
 
 
 PathLike = Union[str, os.PathLike[str]]
+TOKEN_PATTERN = re.compile(r"\w+", re.UNICODE)
 
 
 SCHEMA = """
@@ -55,6 +59,7 @@ CREATE INDEX IF NOT EXISTS knowledge_items_revision_idx
 
 CREATE TABLE IF NOT EXISTS knowledge_chunks (
     tenant_id TEXT NOT NULL,
+    tenant_key TEXT NOT NULL,
     source_id TEXT NOT NULL,
     chunk_index INTEGER NOT NULL,
     chunk_row_id INTEGER NOT NULL UNIQUE,
@@ -102,6 +107,7 @@ CREATE TABLE IF NOT EXISTS sync_runs (
 );
 
 CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_chunks_fts USING fts5(
+    tenant_key,
     chunk_text,
     content='knowledge_chunks',
     content_rowid='chunk_row_id',
@@ -110,22 +116,24 @@ CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_chunks_fts USING fts5(
 
 CREATE TRIGGER IF NOT EXISTS knowledge_chunks_fts_insert
 AFTER INSERT ON knowledge_chunks BEGIN
-    INSERT INTO knowledge_chunks_fts(rowid, chunk_text)
-    VALUES (new.chunk_row_id, new.chunk_text);
+    INSERT INTO knowledge_chunks_fts(rowid, tenant_key, chunk_text)
+    VALUES (new.chunk_row_id, new.tenant_key, new.chunk_text);
 END;
 
 CREATE TRIGGER IF NOT EXISTS knowledge_chunks_fts_delete
 AFTER DELETE ON knowledge_chunks BEGIN
-    INSERT INTO knowledge_chunks_fts(knowledge_chunks_fts, rowid, chunk_text)
-    VALUES ('delete', old.chunk_row_id, old.chunk_text);
+    INSERT INTO knowledge_chunks_fts(
+        knowledge_chunks_fts, rowid, tenant_key, chunk_text
+    ) VALUES ('delete', old.chunk_row_id, old.tenant_key, old.chunk_text);
 END;
 
 CREATE TRIGGER IF NOT EXISTS knowledge_chunks_fts_update
-AFTER UPDATE OF chunk_text ON knowledge_chunks BEGIN
-    INSERT INTO knowledge_chunks_fts(knowledge_chunks_fts, rowid, chunk_text)
-    VALUES ('delete', old.chunk_row_id, old.chunk_text);
-    INSERT INTO knowledge_chunks_fts(rowid, chunk_text)
-    VALUES (new.chunk_row_id, new.chunk_text);
+AFTER UPDATE OF tenant_key, chunk_text ON knowledge_chunks BEGIN
+    INSERT INTO knowledge_chunks_fts(
+        knowledge_chunks_fts, rowid, tenant_key, chunk_text
+    ) VALUES ('delete', old.chunk_row_id, old.tenant_key, old.chunk_text);
+    INSERT INTO knowledge_chunks_fts(rowid, tenant_key, chunk_text)
+    VALUES (new.chunk_row_id, new.tenant_key, new.chunk_text);
 END;
 """
 
@@ -153,8 +161,12 @@ class PortalRepository:
         self.path = path
 
     def upsert_item(
-        self, item: KnowledgeItem, chunks: Sequence[str]
+        self, tenant_id: str, item: KnowledgeItem, chunks: Sequence[str]
     ) -> None:
+        if not tenant_id.strip():
+            raise ValueError("trusted tenant_id is required")
+        if item.tenant_id != tenant_id:
+            raise ValueError("item tenant_id does not match trusted tenant_id")
         connection = portal_connect(self.path)
         try:
             with connection:
@@ -239,12 +251,14 @@ class PortalRepository:
                 connection.executemany(
                     """
                     INSERT INTO knowledge_chunks (
-                        tenant_id, source_id, chunk_index, chunk_row_id, chunk_text
-                    ) VALUES (?, ?, ?, ?, ?)
+                        tenant_id, tenant_key, source_id, chunk_index,
+                        chunk_row_id, chunk_text
+                    ) VALUES (?, ?, ?, ?, ?, ?)
                     """,
                     (
                         (
                             item.tenant_id,
+                            _tenant_fts_key(tenant_id),
                             item.source_id,
                             chunk_index,
                             next_chunk_row_id + chunk_index,
@@ -253,6 +267,63 @@ class PortalRepository:
                         for chunk_index, chunk_text in enumerate(chunks)
                     ),
                 )
+        finally:
+            connection.close()
+
+    def lexical_search(
+        self, tenant_id: str, query: str, limit: int = 10
+    ) -> list[SearchHit]:
+        terms = tuple(dict.fromkeys(_tokenize(query)))
+        if not tenant_id.strip() or not terms or limit <= 0:
+            return []
+        tenant_key = _tenant_fts_key(tenant_id)
+        match_query = _tenant_match_query(tenant_key, terms)
+        connection = portal_connect(self.path)
+        try:
+            candidate_rows = connection.execute(
+                """
+                SELECT chunks.source_id, chunks.chunk_text
+                FROM knowledge_chunks_fts AS fts
+                JOIN knowledge_chunks AS chunks
+                  ON chunks.chunk_row_id = fts.rowid
+                 AND chunks.tenant_id = ?
+                 AND chunks.tenant_key = ?
+                WHERE knowledge_chunks_fts MATCH ?
+                """,
+                (tenant_id, tenant_key, match_query),
+            ).fetchall()
+            if not candidate_rows:
+                return []
+            corpus_rows = connection.execute(
+                """
+                SELECT chunk_text
+                FROM knowledge_chunks
+                WHERE tenant_id = ? AND tenant_key = ?
+                """,
+                (tenant_id, tenant_key),
+            ).fetchall()
+            scores = _tenant_bm25_scores(terms, corpus_rows, candidate_rows)
+            hits = []
+            for source_id, score in sorted(
+                scores.items(), key=lambda result: (-result[1], result[0])
+            )[:limit]:
+                row = connection.execute(
+                    """
+                    SELECT *
+                    FROM knowledge_items
+                    WHERE tenant_id = ? AND source_id = ? AND deleted_at IS NULL
+                    """,
+                    (tenant_id, source_id),
+                ).fetchone()
+                if row is not None:
+                    hits.append(
+                        SearchHit(
+                            item=self._item_from_row(connection, row),
+                            score=score,
+                            matched_by=("lexical",),
+                        )
+                    )
+            return hits
         finally:
             connection.close()
 
@@ -308,3 +379,57 @@ class PortalRepository:
             source_revision=row["source_revision"],
             updated_at=row["updated_at"],
         )
+
+
+def _tenant_fts_key(tenant_id: str) -> str:
+    return "tenant" + hashlib.sha256(tenant_id.encode("utf-8")).hexdigest()
+
+
+def _tokenize(text: str) -> list[str]:
+    return [token.casefold() for token in TOKEN_PATTERN.findall(text)]
+
+
+def _tenant_match_query(tenant_key: str, terms: tuple[str, ...]) -> str:
+    chunk_terms = " OR ".join(f'"{term}"' for term in terms)
+    return f'tenant_key:"{tenant_key}" AND chunk_text:({chunk_terms})'
+
+
+def _tenant_bm25_scores(
+    terms: tuple[str, ...],
+    corpus_rows: Sequence[sqlite3.Row],
+    candidate_rows: Sequence[sqlite3.Row],
+) -> dict[str, float]:
+    corpus = [_tokenize(row["chunk_text"]) for row in corpus_rows]
+    document_count = len(corpus)
+    average_length = (
+        sum(len(tokens) for tokens in corpus) / document_count
+        if document_count
+        else 1.0
+    )
+    document_frequency = {
+        term: sum(term in document for document in corpus) for term in terms
+    }
+    scores: dict[str, float] = {}
+    for row in candidate_rows:
+        document = _tokenize(row["chunk_text"])
+        score = 0.0
+        for term in terms:
+            term_frequency = document.count(term)
+            if not term_frequency:
+                continue
+            inverse_document_frequency = math.log(
+                1.0
+                + (
+                    document_count - document_frequency[term] + 0.5
+                )
+                / (document_frequency[term] + 0.5)
+            )
+            denominator = term_frequency + 1.2 * (
+                0.25 + 0.75 * len(document) / average_length
+            )
+            score += inverse_document_frequency * (
+                term_frequency * 2.2 / denominator
+            )
+        source_id = row["source_id"]
+        scores[source_id] = max(scores.get(source_id, 0.0), score)
+    return scores

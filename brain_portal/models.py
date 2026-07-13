@@ -53,3 +53,7 @@ class CitedAnswer:
     source_ids: tuple[str, ...]
     provider: str
     degraded: bool = False
+
+    def __post_init__(self) -> None:
+        if not self.source_ids:
+            raise ValueError("at least one source_id is required")
