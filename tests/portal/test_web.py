@@ -233,7 +233,7 @@ def test_search_has_degraded_state_citations_and_source_cards(portal_setup):
     html = client.get("/search?q=agent&cloud=ai").get_data(as_text=True)
 
     assert 'id="retrieval-status"' in html
-    assert "Keyword results are available while semantic search recovers." in html
+    assert "目前以關鍵字結果為主；語意搜尋恢復後會自動加入。" in html
     assert 'id="answer-citations"' in html
     assert 'href="/item/ai-agent"' in html
     assert 'data-source-id="ai-agent"' in html
@@ -252,7 +252,7 @@ def test_search_provider_failure_shows_explicit_source_only_state():
     html = app.test_client().get("/search?q=agent").get_data(as_text=True)
 
     assert 'id="source-only-state"' in html
-    assert "No supported answer is available. Review the closest sources below." in html
+    assert "目前無法生成有充分證據支持的回答；請先閱讀下方來源。" in html
     assert 'data-source-id="ai-agent"' in html
 
 
@@ -262,7 +262,7 @@ def test_blank_search_has_empty_state_and_does_not_call_services(portal_setup):
     html = client.get("/search").get_data(as_text=True)
 
     assert 'id="search-empty-state"' in html
-    assert "Describe what you want to find." in html
+    assert "描述你想找的內容，系統會保留最接近的原始筆記供你確認。" in html
     assert search.calls == []
     assert answers.calls == []
 
@@ -283,7 +283,7 @@ def test_search_error_has_actionable_error_contract():
 
     assert response.status_code == 503
     assert 'id="search-error-state"' in html
-    assert "Search is temporarily unavailable. Try again in a moment." in html
+    assert "請稍候再試；你的原始資料不會因此被修改。" in html
     assert "private provider detail" not in html
 
 
@@ -328,7 +328,17 @@ def test_place_and_sync_pages_use_reader_facing_states(portal_setup):
     assert "Da&#39;an" in place_html
     assert "Open source note" in place_html
     assert 'id="sync-status"' in sync_html
-    assert "Up to date" in sync_html
+    assert "尚未索引" in sync_html
+
+
+def test_sync_page_surfaces_a_stale_source_state(portal_setup):
+    client, repository, *_ = portal_setup
+    repository.sync_by_type[None] = SyncRun("obsidian", "stale", "2026-07-13T10:30:00+00:00")
+
+    html = client.get("/sync").get_data(as_text=True)
+
+    assert "需要更新" in html
+    assert "已是最新" not in html
 
 
 def test_default_dependencies_wire_hybrid_search_and_ordered_answer_chain(monkeypatch):
@@ -614,7 +624,7 @@ def test_repository_failure_returns_bounded_designed_503(path):
     assert response.status_code == 503
     assert html.count("<h1") == 1
     assert 'id="service-unavailable"' in html
-    assert "Your notes are temporarily unavailable. Try again in a moment." in html
+    assert "請稍候再試；原始 Obsidian 或 Notion 內容不會被修改。" in html
     assert "private database" not in html
 
 
@@ -658,6 +668,48 @@ def test_cloud_derives_related_concepts_and_adjacent_clouds(portal_setup):
     assert "reliability" in html
     assert 'id="cloud-rail"' in html
     assert 'href="/cloud/food"' in html
+
+
+def test_cloud_concept_links_can_cross_cloud_boundaries():
+    repository = FakeRepository()
+    repository.items = [
+        item("ai-agent", cloud_key="ai", concepts=("agents",)),
+        item("web3-agent", cloud_key="web3", concepts=("agents",)),
+    ]
+    app = create_app(
+        dependencies=PortalDependencies(
+            repository, TenantResolver(), SearchService(), AnswerService()
+        )
+    )
+    app.config.update(TESTING=True)
+
+    html = app.test_client().get("/cloud/ai").get_data(as_text=True)
+
+    assert 'href="/search?q=agents&amp;concept=agents"' in html
+    assert 'cloud=ai&amp;' not in html
+
+
+def test_food_workspace_renders_only_real_coordinate_map_markers():
+    repository = FakeRepository()
+    repository.items = [
+        item(
+            "food-place",
+            cloud_key="food",
+            place={"name": "Quiet noodle shop", "latitude": 25.03, "longitude": 121.54},
+        )
+    ]
+    app = create_app(
+        dependencies=PortalDependencies(
+            repository, TenantResolver(), SearchService(), AnswerService()
+        )
+    )
+    app.config.update(TESTING=True)
+
+    html = app.test_client().get("/cloud/food").get_data(as_text=True)
+
+    assert 'id="food-map"' in html
+    assert 'data-source-id="food-place"' in html
+    assert "地圖資料不足" not in html
 
 
 def test_place_builds_bounded_encoded_google_maps_search_action():
@@ -713,7 +765,7 @@ def test_over_limit_search_query_returns_designed_400_without_services(portal_se
 
     assert response.status_code == 400
     assert 'id="query-too-long"' in html
-    assert "Keep your search to 500 characters or fewer." in html
+    assert "請將搜尋文字控制在 500 個字元以內。" in html
     assert 'maxlength="500"' in html
     assert "SECRET_TAIL" not in html
     assert search.calls == []
@@ -723,10 +775,10 @@ def test_over_limit_search_query_returns_designed_400_without_services(portal_se
 @pytest.mark.parametrize(
     ("status", "label"),
     [
-        ("running", "Syncing"),
-        ("success", "Up to date"),
-        ("stale", "Stale"),
-        ("permission_required", "Permission required"),
+        ("running", "索引中"),
+        ("success", "已是最新"),
+        ("stale", "需要更新"),
+        ("permission_required", "需要重新授權"),
     ],
 )
 def test_item_shows_derived_sync_status_label(portal_setup, status, label):
@@ -745,10 +797,10 @@ def test_item_hides_sync_status_badge_when_no_sync_recorded(portal_setup):
 
     html = client.get("/item/ai-agent").get_data(as_text=True)
 
-    assert "Syncing" not in html
-    assert "Up to date" not in html
-    assert "Stale" not in html
-    assert "Permission required" not in html
+    assert "索引中" not in html
+    assert "已是最新" not in html
+    assert "需要更新" not in html
+    assert "需要重新授權" not in html
 
 
 def test_item_returns_bounded_503_when_sync_status_lookup_fails():

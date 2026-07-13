@@ -1,119 +1,17 @@
 {% extends "portal/base.html" %}
 {% block content %}
-<div class="page-shell search-page">
-  <header class="page-intro">
-    <p class="eyebrow">Search your sources</p>
-    <h1>Turn a question into a trail of notes.</h1>
-  </header>
-
-  <form class="search-bar search-controls" action="{{ url_for('portal.search') }}" method="get" data-search-form data-loading-copy="Searching your brain">
-    <div class="control-field query-field">
-      <label for="search-query">Search query</label>
-      <input id="search-query" name="q" type="search" maxlength="500" value="{{ view.query }}" placeholder="Ask a question or name a topic">
-    </div>
-    <div class="control-field">
-      <label for="search-type">Type</label>
-      <select id="search-type" name="type">
-        <option value="">All types</option>
-        {% for value in view.types %}<option value="{{ value }}" {% if view.item_type == value %}selected{% endif %}>{{ value|title }}</option>{% endfor %}
-      </select>
-    </div>
-    <div class="control-field">
-      <label for="search-concept">Concept</label>
-      <select id="search-concept" name="concept">
-        <option value="">All concepts</option>
-        {% for value in view.concepts %}<option value="{{ value }}" {% if view.concept == value %}selected{% endif %}>{{ value }}</option>{% endfor %}
-      </select>
-    </div>
-    <div class="control-field">
-      <label for="search-freshness">Freshness</label>
-      <select id="search-freshness" name="freshness">
-        <option value="">Any time</option>
-        <option value="7d" {% if view.freshness == '7d' %}selected{% endif %}>Past 7 days</option>
-        <option value="30d" {% if view.freshness == '30d' %}selected{% endif %}>Past 30 days</option>
-      </select>
-    </div>
-    <div class="control-field">
-      <label for="search-place">Place</label>
-      <select id="search-place" name="place">
-        <option value="">All notes</option>
-        <option value="with_place" {% if view.place_filter == 'with_place' %}selected{% endif %}>Places only</option>
-      </select>
-    </div>
-    <div class="control-field cloud-field">
-      <label for="search-cloud">Cloud</label>
-      <select id="search-cloud" name="cloud">
-        <option value="">All Clouds</option>
-        {% for cloud in view.clouds %}
-        <option value="{{ cloud.key }}" {% if view.cloud_key == cloud.key %}selected{% endif %}>{{ cloud.name }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <button type="submit">Search notes</button>
-    <span class="form-status" aria-live="polite" data-search-status></span>
+<div class="workspace-page search-page"><header class="page-intro"><p class="eyebrow">知識搜尋</p><h1>把問題變成可追溯的筆記路徑。</h1></header>
+  <form class="search-controls" action="{{ url_for('portal.search') }}" method="get" data-search-form data-loading-copy="正在搜尋你的知識庫">
+    <div class="control-field query-field"><label for="search-query">你想找什麼？</label><input id="search-query" name="q" type="search" maxlength="500" value="{{ view.query }}" placeholder="輸入問題、主題、地點或概念"></div>
+    <div class="control-field"><label for="search-type">類型</label><select id="search-type" name="type"><option value="">所有類型</option>{% for value in view.types %}<option value="{{ value }}" {% if view.item_type == value %}selected{% endif %}>{{ value|title }}</option>{% endfor %}</select></div>
+    <div class="control-field"><label for="search-concept">概念</label><select id="search-concept" name="concept"><option value="">所有概念</option>{% for value in view.concepts %}<option value="{{ value }}" {% if view.concept == value %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></div>
+    <div class="control-field"><label for="search-freshness">更新時間</label><select id="search-freshness" name="freshness"><option value="">不限</option><option value="7d" {% if view.freshness == '7d' %}selected{% endif %}>最近 7 天</option><option value="30d" {% if view.freshness == '30d' %}selected{% endif %}>最近 30 天</option></select></div>
+    <div class="control-field"><label for="search-place">地點</label><select id="search-place" name="place"><option value="">全部筆記</option><option value="with_place" {% if view.place_filter == 'with_place' %}selected{% endif %}>只看地點</option></select></div>
+    <div class="control-field cloud-field"><label for="search-cloud">Cloud</label><select id="search-cloud" name="cloud"><option value="">所有 Cloud</option>{% for cloud in view.clouds %}<option value="{{ cloud.key }}" {% if view.cloud_key == cloud.key %}selected{% endif %}>{{ cloud.name }}</option>{% endfor %}</select></div><button type="submit">搜尋筆記</button><span class="form-status" aria-live="polite" data-search-status></span>
   </form>
-
-  {% if view.query_too_long %}
-  <section id="query-too-long" class="state-card error-state" aria-live="polite">
-    <h2>Shorten this search</h2>
-    <p>Keep your search to 500 characters or fewer.</p>
-  </section>
-  {% elif view.error %}
-  <section id="search-error-state" class="state-card error-state" aria-live="polite">
-    <h2>Search needs another moment</h2>
-    <p>Search is temporarily unavailable. Try again in a moment.</p>
-  </section>
-  {% elif not view.query %}
-  <section id="search-empty-state" class="state-card" aria-live="polite">
-    <h2>Start with a question</h2>
-    <p>Describe what you want to find. Your closest source notes will stay visible with every answer.</p>
-  </section>
-  {% else %}
-    {% if view.degraded %}
-    <p id="retrieval-status" class="status-strip" role="status">Keyword results are available while semantic search recovers.</p>
-    {% endif %}
-
-    {% if view.answer %}
-    <section class="answer-panel" aria-labelledby="answer-title">
-      <p class="section-kicker">Supported answer</p>
-      <h2 id="answer-title">What your notes suggest</h2>
-      <p class="answer-text">{{ view.answer.text }}</p>
-      <div id="answer-citations" class="citation-list" aria-label="Answer sources">
-        {% for citation in view.answer.citations %}
-        <a class="citation-pill" href="{{ citation.url }}">{{ loop.index }} · {{ citation.title }}</a>
-        {% endfor %}
-      </div>
-    </section>
-    {% elif view.results %}
-    <section id="source-only-state" class="state-card" aria-live="polite">
-      <h2>Closest sources</h2>
-      <p>No supported answer is available. Review the closest sources below.</p>
-    </section>
-    {% else %}
-    <section class="state-card" aria-live="polite">
-      <h2>No close match yet</h2>
-      <p>Try a broader phrase or remove the Cloud filter.</p>
-    </section>
-    {% endif %}
-
-    {% if view.results %}
-    <section class="result-section" aria-labelledby="results-title">
-      <div class="section-heading split-heading">
-        <h2 id="results-title">Source notes</h2>
-        <p>{{ view.results|length }} close match{% if view.results|length != 1 %}es{% endif %}</p>
-      </div>
-      <div class="card-grid">
-        {% for item in view.results %}
-        <article class="source-card" data-source-id="{{ item.source_id }}">
-          <div class="source-card-meta"><span class="cloud-label">{{ item.cloud_key }}</span><span>{{ item.item_type }}</span></div>
-          <h3><a href="{{ item.url }}">{{ item.title }}</a></h3>
-          <p>{{ item.summary }}</p>
-          <div class="source-card-actions"><a href="{{ item.url }}">Read note</a>{% if item.place_url %}<a href="{{ item.place_url }}">View place</a>{% endif %}</div>
-        </article>
-        {% endfor %}
-      </div>
-    </section>
-    {% endif %}
-  {% endif %}
+  {% if view.query_too_long %}<section id="query-too-long" class="state-card error-state" aria-live="polite"><h2>搜尋內容太長</h2><p>請將搜尋文字控制在 500 個字元以內。</p></section>
+  {% elif view.error %}<section id="search-error-state" class="state-card error-state" aria-live="polite"><h2>搜尋暫時無法使用</h2><p>請稍候再試；你的原始資料不會因此被修改。</p></section>
+  {% elif not view.query %}<section id="search-empty-state" class="state-card" aria-live="polite"><h2>從一個問題開始</h2><p>描述你想找的內容，系統會保留最接近的原始筆記供你確認。</p></section>
+  {% else %}{% if view.degraded %}<p id="retrieval-status" class="status-strip" role="status">目前以關鍵字結果為主；語意搜尋恢復後會自動加入。</p>{% endif %}{% if view.answer %}<section class="answer-panel" aria-labelledby="answer-title"><p class="eyebrow">有來源支持的回答</p><h2 id="answer-title">你的筆記指出</h2><p class="answer-text">{{ view.answer.text }}</p><div id="answer-citations" class="concept-row" aria-label="Answer sources">{% for citation in view.answer.citations %}<a href="{{ citation.url }}">{{ loop.index }} · {{ citation.title }}</a>{% endfor %}</div></section>{% elif view.results %}<section id="source-only-state" class="state-card" aria-live="polite"><h2>最接近的原始資料</h2><p>目前無法生成有充分證據支持的回答；請先閱讀下方來源。</p></section>{% else %}<section class="state-card" aria-live="polite"><h2>尚未找到接近結果</h2><p>試著換成較廣的描述，或移除 Cloud 篩選。</p></section>{% endif %}{% if view.results %}<section class="result-section" aria-labelledby="results-title"><div class="section-head"><h2 id="results-title">相關筆記</h2><span>{{ view.results|length }} 筆</span></div><div class="card-grid">{% for item in view.results %}<article class="source-card" data-source-id="{{ item.source_id }}"><div class="source-card-meta"><span>{{ item.cloud_key }}</span><span>{{ item.item_type }}</span></div><h3><a href="{{ item.url }}">{{ item.title }}</a></h3><p>{{ item.summary }}</p><div class="source-card-actions"><a href="{{ item.url }}">閱讀筆記</a>{% if item.place_url %}<a href="{{ item.place_url }}">查看地點</a>{% endif %}</div></article>{% endfor %}</div></section>{% endif %}{% endif %}
 </div>
 {% endblock %}

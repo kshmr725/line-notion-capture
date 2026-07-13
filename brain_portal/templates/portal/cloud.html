@@ -21,7 +21,7 @@
   {% elif cloud.key == 'food' %}
   <section id="food-discovery" class="domain-grid food-grid" aria-labelledby="food-title">
     <div class="food-panel"><div class="section-head"><h2 id="food-title">美食探索</h2><span>{{ workspace.places|length }} 個地點</span></div>
-      {% if workspace.has_coordinates %}<div class="real-map-state" role="status">已偵測到真實座標；地圖視圖會以原始地點資料呈現。</div>{% else %}<p class="map-fallback">地圖資料不足，改以清單瀏覽。</p>{% endif %}
+      {% if workspace.has_coordinates %}<div id="food-map" class="real-map" role="img" aria-label="以已儲存座標呈現的收藏地點地圖">{% for point in workspace.map_points %}<a class="map-marker" data-source-id="{{ point.item.source_id }}" href="{{ point.item.place_url or point.item.url }}" style="--x:{{ point.x }}%; --y:{{ point.y }}%;" aria-label="開啟 {{ point.item.place.name or point.item.title }}">{{ loop.index }}</a>{% endfor %}</div>{% else %}<p class="map-fallback">地圖資料不足，改以清單瀏覽。</p>{% endif %}
     </div>
     <div class="workspace-section"><div class="section-head"><h2>附近想去</h2><span>依已儲存資料</span></div>
       <div class="continue-list">{% for item in workspace.places %}<a class="continue-row" data-source-id="{{ item.source_id }}" href="{{ item.place_url or item.url }}"><span class="row-icon" aria-hidden="true">⌖</span><span class="row-content"><strong>{{ item.place.name or item.title }}</strong><small>{{ item.place.area or item.place.category or '未分類地點' }}</small></span><span class="cloud-badge cloud-food">地點</span></a>{% else %}<p class="empty-inline">尚未有含地點資料的筆記。</p>{% endfor %}</div>

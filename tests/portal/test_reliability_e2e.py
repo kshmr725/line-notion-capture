@@ -118,16 +118,15 @@ class OtherEmbedder:
         return [1.0, 1.0, 1.0]
 
 
-def test_verify_script_flags_mixed_embedding_spaces(tmp_path):
+def test_reindexing_with_a_new_embedding_model_replaces_the_old_space(tmp_path):
     path = tmp_path / "portal.sqlite3"
     init_portal_db(path)
     repo = PortalRepository(path)
     run_index(
         "kevin", TogglableConnector([_document("note-a.md")]), repo, FakeEmbedder()
     )
-    # note-a.md is unchanged (same revision) so it keeps its original embedding
-    # space, while note-b.md is newly indexed with a different one. Both stay
-    # live, reproducing a real migrated-embedding-model scenario.
+    # A model change reindexes note-a.md as well as note-b.md, so a mixed
+    # vector space cannot survive in the live projection.
     run_index(
         "kevin",
         TogglableConnector([_document("note-a.md"), _document("note-b.md")]),
@@ -138,8 +137,10 @@ def test_verify_script_flags_mixed_embedding_spaces(tmp_path):
     report = verify_brain_portal.verify("kevin", str(path))
 
     assert len(repo.list_items("kevin")) == 2
-    assert report["valid"] is False
-    assert len(report["embedding_spaces"]) == 2
+    assert report["valid"] is True
+    assert report["embedding_spaces"] == [
+        {"model": "other-embedding", "dimensions": 3}
+    ]
 
 
 def test_verify_script_ignores_orphaned_chunks_from_soft_deleted_items(tmp_path):

@@ -29,12 +29,21 @@ class IndexReport:
 
 
 def normalize_document(doc: SourceDocument) -> KnowledgeItem:
-    paragraphs = [part.strip() for part in doc.body.split("\n\n") if part.strip()]
+    body = _without_front_matter(doc.body)
+    paragraphs = [part.strip() for part in body.split("\n\n") if part.strip()]
     metadata_summary = doc.metadata.get("summary")
     summary = (
         metadata_summary.strip()[:500]
         if isinstance(metadata_summary, str) and metadata_summary.strip()
-        else next((p for p in paragraphs if not p.startswith("#")), doc.title)[:500]
+        else next(
+            (
+                paragraph
+                for paragraph in paragraphs
+                if not paragraph.startswith("#")
+                and paragraph.casefold() != doc.title.casefold()
+            ),
+            doc.title,
+        )[:500]
     )
     return KnowledgeItem(
         tenant_id=doc.tenant_id,
@@ -43,7 +52,7 @@ def normalize_document(doc: SourceDocument) -> KnowledgeItem:
         canonical_ref=doc.canonical_ref,
         title=doc.title,
         summary=summary,
-        body=doc.body,
+        body=body,
         cloud_key=doc.cloud_key,
         item_type=str(doc.metadata.get("item_type") or "research"),
         concepts=tuple(doc.metadata.get("concepts") or ()),
@@ -55,6 +64,15 @@ def normalize_document(doc: SourceDocument) -> KnowledgeItem:
         source_revision=doc.source_revision,
         updated_at=doc.updated_at,
     )
+
+
+def _without_front_matter(body: str) -> str:
+    if not body.startswith("---\n"):
+        return body
+    closing = body.find("\n---\n", 4)
+    if closing < 0:
+        return body
+    return body[closing + 5 :].lstrip()
 
 
 def run_index(
@@ -101,6 +119,8 @@ def run_index(
             continue
         if doc.source_id in existing and (
             existing[doc.source_id].source_revision == doc.source_revision
+        ) and repo.has_embedding_profile(
+            tenant_id, doc.source_id, model_id, dimensions
         ):
             unchanged += 1
             continue

@@ -107,6 +107,23 @@ def test_run_index_without_embedder_persists_a_lexical_projection(portal_repo):
     ]
 
 
+def test_lexical_only_reindex_removes_previously_stored_embeddings(portal_repo):
+    connector = FakeConnector([document()])
+    run_index("kevin", connector, portal_repo, FakeEmbedder())
+
+    report = run_index("kevin", connector, portal_repo, None)
+
+    connection = portal_connect(portal_repo.path)
+    try:
+        rows = connection.execute(
+            "SELECT embedding_json FROM knowledge_chunks WHERE tenant_id = ?", ("kevin",)
+        ).fetchall()
+    finally:
+        connection.close()
+    assert report == IndexReport(indexed=1, unchanged=0, deleted=0, failed=0)
+    assert [row["embedding_json"] for row in rows] == [None]
+
+
 def test_normalization_uses_first_body_paragraph_and_metadata():
     doc = document(body="# Heading\n\nFirst useful paragraph\n\nSecond paragraph")
 
@@ -115,6 +132,25 @@ def test_normalization_uses_first_body_paragraph_and_metadata():
     assert item.summary == "First useful paragraph"
     assert item.item_type == "research"
     assert item.concepts == ("AI Agents",)
+
+
+def test_normalization_hides_yaml_front_matter_from_cards_and_reader_body():
+    doc = document(
+        body="---\nsummary_brief: internal metadata\n---\n# Heading\n\nUseful source summary"
+    )
+
+    item = normalize_document(doc)
+
+    assert item.summary == "Useful source summary"
+    assert "summary_brief" not in item.body
+
+
+def test_normalization_does_not_repeat_the_title_as_its_summary():
+    doc = document(body="Agent\n\nA distinct useful summary")
+
+    item = normalize_document(doc)
+
+    assert item.summary == "A distinct useful summary"
 
 
 def test_index_persists_embeddings_and_successful_sync_run(portal_repo):

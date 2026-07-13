@@ -465,6 +465,39 @@ class PortalRepository:
         finally:
             connection.close()
 
+    def has_embedding_profile(
+        self,
+        tenant_id: str,
+        source_id: str,
+        model_id: str | None,
+        dimensions: int | None,
+    ) -> bool:
+        connection = portal_connect(self.path)
+        try:
+            row = connection.execute(
+                """
+                SELECT COUNT(*) AS chunk_count,
+                       SUM(CASE WHEN embedding_json IS NOT NULL THEN 1 ELSE 0 END)
+                         AS embedded_count,
+                       SUM(CASE WHEN embedding_model = ?
+                                      AND embedding_dimensions = ?
+                                 THEN 1 ELSE 0 END) AS matching_count
+                FROM knowledge_chunks
+                WHERE tenant_id = ? AND source_id = ?
+                """,
+                (model_id, dimensions, tenant_id, source_id),
+            ).fetchone()
+            if row["chunk_count"] == 0:
+                return False
+            if model_id is None:
+                return row["embedded_count"] == 0
+            return (
+                row["embedded_count"] == row["chunk_count"]
+                and row["matching_count"] == row["chunk_count"]
+            )
+        finally:
+            connection.close()
+
     def latest_sync(
         self, tenant_id: str, source_type: str | None = None
     ) -> SyncRun | None:

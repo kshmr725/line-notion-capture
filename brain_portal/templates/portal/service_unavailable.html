@@ -1,10 +1,4 @@
 {% extends "portal/base.html" %}
 {% block content %}
-<div class="page-shell">
-  <section id="service-unavailable" class="state-card error-state" aria-live="polite">
-    <p class="eyebrow">Source connection</p>
-    <h1>Your notes need another moment.</h1>
-    <p>Your notes are temporarily unavailable. Try again in a moment.</p>
-  </section>
-</div>
+<div class="workspace-page"><section id="service-unavailable" class="state-card error-state" aria-live="polite"><p class="eyebrow">資料來源</p><h1>筆記暫時無法讀取。</h1><p>請稍候再試；原始 Obsidian 或 Notion 內容不會被修改。</p></section></div>
 {% endblock %}

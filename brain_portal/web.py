@@ -21,10 +21,10 @@ from brain_portal.search import SearchResults
 
 
 SYNC_STATUS_LABELS = {
-    "running": "Syncing",
-    "success": "Up to date",
-    "stale": "Stale",
-    "permission_required": "Permission required",
+    "running": "索引中",
+    "success": "已是最新",
+    "stale": "需要更新",
+    "permission_required": "需要重新授權",
 }
 
 
@@ -231,7 +231,7 @@ def create_portal_blueprint(dependencies: PortalDependencies) -> Blueprint:
             items=[_item_card(item) for item in items],
             concepts=concepts,
             adjacent_clouds=adjacent,
-            workspace=_cloud_workspace(items, key),
+            workspace=_cloud_workspace(items, key, all_items),
         )
 
     @portal.get("/item/<path:source_id>")
@@ -273,13 +273,25 @@ def create_portal_blueprint(dependencies: PortalDependencies) -> Blueprint:
     @portal.get("/sync")
     def sync():
         items = _tenant_items(dependencies)
-        last_updated = max((item.updated_at for item in items), default=None)
+        try:
+            latest_sync = dependencies.repository.latest_sync(g.portal_tenant.tenant_id)
+        except Exception:
+            raise PortalDataUnavailable() from None
+        last_updated = (
+            latest_sync.finished_at
+            if latest_sync is not None and latest_sync.finished_at
+            else max((item.updated_at for item in items), default=None)
+        )
         return render_template(
             "portal/sync.html",
             page_title="資料來源",
             tenant=_tenant_view(),
             sync={
-                "state": "Up to date",
+                "state": (
+                    SYNC_STATUS_LABELS.get(latest_sync.status, "需要確認")
+                    if latest_sync is not None
+                    else "尚未索引"
+                ),
                 "last_updated": last_updated,
                 "source_count": len(items),
             },
@@ -489,7 +501,9 @@ def _freshness_label(items: list[KnowledgeItem]) -> str:
     return f"更新於 {latest[:10]}"
 
 
-def _cloud_workspace(items: list[KnowledgeItem], key: str) -> dict[str, object]:
+def _cloud_workspace(
+    items: list[KnowledgeItem], key: str, all_items: list[KnowledgeItem]
+) -> dict[str, object]:
     definition = next(cloud for cloud in CLOUDS if cloud["key"] == key)
     tabs = [
         {
@@ -503,18 +517,19 @@ def _cloud_workspace(items: list[KnowledgeItem], key: str) -> dict[str, object]:
         {
             "label": concept,
             "count": sum(concept in item.concepts for item in items),
-            "url": url_for("portal.search", q=concept, cloud=key, concept=concept),
+            "url": url_for("portal.search", q=concept, concept=concept),
         }
         for concept in concepts
     ]
     places = [item for item in items if item.place is not None]
-    has_coordinates = any(_place_has_coordinates(item.place) for item in places)
+    map_points = _map_points(places)
     return {
         "tabs": tabs,
         "recent": [_item_card(item) for item in items[:6]],
         "concepts": concept_counts,
         "places": [_item_card(item) for item in places],
-        "has_coordinates": has_coordinates,
+        "has_coordinates": bool(map_points),
+        "map_points": map_points,
         "item_count": len(items),
     }
 
@@ -528,3 +543,31 @@ def _place_has_coordinates(place: dict[str, object] | None) -> bool:
     except (TypeError, ValueError):
         return False
     return math.isfinite(latitude) and math.isfinite(longitude)
+
+
+def _map_points(items: list[KnowledgeItem]) -> list[dict[str, object]]:
+    raw = []
+    for item in items:
+        if not _place_has_coordinates(item.place):
+            continue
+        raw.append(
+            (
+                _item_card(item),
+                float(item.place["latitude"]),
+                float(item.place["longitude"]),
+            )
+        )
+    if not raw:
+        return []
+    min_lat, max_lat = min(point[1] for point in raw), max(point[1] for point in raw)
+    min_lon, max_lon = min(point[2] for point in raw), max(point[2] for point in raw)
+    latitude_span = max(max_lat - min_lat, 1.0)
+    longitude_span = max(max_lon - min_lon, 1.0)
+    return [
+        {
+            "item": card,
+            "x": round(15 + 70 * (longitude - min_lon) / longitude_span, 2),
+            "y": round(85 - 70 * (latitude - min_lat) / latitude_span, 2),
+        }
+        for card, latitude, longitude in raw
+    ]
