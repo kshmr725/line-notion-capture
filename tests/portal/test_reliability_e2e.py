@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from brain_portal.config import PortalSettings
 from brain_portal.db import PortalRepository, init_portal_db
 from brain_portal.indexer import normalize_document, run_index
 from brain_portal.models import SourceDocument
@@ -109,27 +110,56 @@ def test_stale_sync_recovers_to_valid_after_a_successful_reindex(index_fixture):
     assert recovered_report["valid"] is True
 
 
+class OtherEmbedder:
+    model_id = "other-embedding"
+    dimensions = 3
+
+    def embed(self, text: str, task_type: str) -> list[float]:
+        return [1.0, 1.0, 1.0]
+
+
 def test_verify_script_flags_mixed_embedding_spaces(tmp_path):
     path = tmp_path / "portal.sqlite3"
     init_portal_db(path)
     repo = PortalRepository(path)
-    connector = TogglableConnector([_document("note-a.md")])
-    run_index("kevin", connector, repo, FakeEmbedder())
-
-    class OtherEmbedder:
-        model_id = "other-embedding"
-        dimensions = 3
-
-        def embed(self, text: str, task_type: str) -> list[float]:
-            return [1.0, 1.0, 1.0]
-
-    connector2 = TogglableConnector([_document("note-b.md")])
-    run_index("kevin", connector2, repo, OtherEmbedder())
+    run_index(
+        "kevin", TogglableConnector([_document("note-a.md")]), repo, FakeEmbedder()
+    )
+    # note-a.md is unchanged (same revision) so it keeps its original embedding
+    # space, while note-b.md is newly indexed with a different one. Both stay
+    # live, reproducing a real migrated-embedding-model scenario.
+    run_index(
+        "kevin",
+        TogglableConnector([_document("note-a.md"), _document("note-b.md")]),
+        repo,
+        OtherEmbedder(),
+    )
 
     report = verify_brain_portal.verify("kevin", str(path))
 
+    assert len(repo.list_items("kevin")) == 2
     assert report["valid"] is False
     assert len(report["embedding_spaces"]) == 2
+
+
+def test_verify_script_ignores_orphaned_chunks_from_soft_deleted_items(tmp_path):
+    path = tmp_path / "portal.sqlite3"
+    init_portal_db(path)
+    repo = PortalRepository(path)
+    run_index(
+        "kevin", TogglableConnector([_document("note-a.md")]), repo, FakeEmbedder()
+    )
+    # note-a.md is absent from this scan and gets soft-deleted; its old chunks
+    # (and their embedding_model) remain in the table but must not count.
+    run_index(
+        "kevin", TogglableConnector([_document("note-b.md")]), repo, OtherEmbedder()
+    )
+
+    report = verify_brain_portal.verify("kevin", str(path))
+
+    assert len(repo.list_items("kevin")) == 1
+    assert report["embedding_spaces"] == [{"model": "other-embedding", "dimensions": 3}]
+    assert report["valid"] is True
 
 
 def test_verify_cli_prints_json_and_exits_zero_for_a_healthy_tenant(tmp_path):
@@ -242,13 +272,13 @@ def test_index_script_dry_run_reports_counts_without_writing(tmp_path, capsys):
     assert output["would_index"] == 1
 
 
-def test_index_script_indexes_obsidian_root_without_an_embedder(tmp_path, monkeypatch, capsys):
+def test_index_script_requires_a_gemini_key_for_a_real_run(tmp_path, capsys):
     root = tmp_path / "Kevin_Brain"
     note = root / "50_Tech_AI自動化" / "Note.md"
     note.parent.mkdir(parents=True)
     note.write_text("# Note\n\nAgent workflow", encoding="utf-8")
     database_path = tmp_path / "portal.sqlite3"
-    monkeypatch.setenv("GEMINI_API_KEY", "")
+    settings = PortalSettings(gemini_api_key="", notion_token="token")
 
     exit_code = index_brain_portal.main(
         [
@@ -258,9 +288,34 @@ def test_index_script_indexes_obsidian_root_without_an_embedder(tmp_path, monkey
             str(root),
             "--database",
             str(database_path),
-        ]
+        ],
+        settings=settings,
     )
 
     assert exit_code == 1
     output = capsys.readouterr()
     assert "GEMINI_API_KEY" in output.err
+    assert not database_path.exists()
+
+
+def test_index_script_reports_a_clean_error_for_a_missing_notion_token(tmp_path, capsys):
+    database_path = tmp_path / "portal.sqlite3"
+    settings = PortalSettings(gemini_api_key="", notion_token="")
+
+    exit_code = index_brain_portal.main(
+        [
+            "--tenant",
+            "kevin",
+            "--notion-connection",
+            "db-1",
+            "--dry-run",
+            "--database",
+            str(database_path),
+        ],
+        settings=settings,
+    )
+
+    output = capsys.readouterr()
+    assert exit_code == 1
+    assert "NOTION_TOKEN" in output.err
+    assert "Traceback" not in output.err

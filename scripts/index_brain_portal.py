@@ -26,7 +26,7 @@ def _build_connector(args: argparse.Namespace, settings: PortalSettings):
     )
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, settings: PortalSettings | None = None) -> int:
     parser = argparse.ArgumentParser(description="Index Brain Cloud Portal sources")
     parser.add_argument("--tenant", required=True)
     source = parser.add_mutually_exclusive_group(required=True)
@@ -36,8 +36,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--database", default=None)
     args = parser.parse_args(argv)
 
-    settings = PortalSettings()
+    settings = settings or PortalSettings()
     database_path = args.database or settings.database_path
+
+    if args.notion_connection and not settings.notion_token.strip():
+        print("NOTION_TOKEN is required to use --notion-connection", file=sys.stderr)
+        return 1
+
     connector = _build_connector(args, settings)
 
     if args.dry_run:

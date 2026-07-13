@@ -71,10 +71,13 @@ def _embedding_spaces(database_path: str, tenant_id: str) -> list[dict]:
     try:
         rows = connection.execute(
             """
-            SELECT DISTINCT embedding_model, embedding_dimensions
-            FROM knowledge_chunks
-            WHERE tenant_id = ? AND embedding_json IS NOT NULL
-            ORDER BY embedding_model, embedding_dimensions
+            SELECT DISTINCT c.embedding_model, c.embedding_dimensions
+            FROM knowledge_chunks AS c
+            JOIN knowledge_items AS i
+              ON i.tenant_id = c.tenant_id AND i.source_id = c.source_id
+             AND i.deleted_at IS NULL
+            WHERE c.tenant_id = ? AND c.embedding_json IS NOT NULL
+            ORDER BY c.embedding_model, c.embedding_dimensions
             """,
             (tenant_id,),
         ).fetchall()
