@@ -1,9 +1,15 @@
 import json
+import logging
 from typing import get_type_hints
 
 import pytest
 
-from brain_portal.answers import AnswerProvider, answer_query
+from brain_portal.answers import (
+    AnswerProvider,
+    DeepSeekAnswerProvider,
+    GeminiAnswerProvider,
+    answer_query,
+)
 from brain_portal.models import KnowledgeItem, SearchHit
 
 
@@ -196,3 +202,99 @@ def test_note_prompt_injection_cannot_change_rules_or_allowed_citations():
         malicious_body
     )
     assert 'Allowed citation source_ids: ["item-1"]' in prompt
+
+
+class FakeResponse:
+    def __init__(self, payload):
+        self.payload = payload
+
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return self.payload
+
+
+def test_gemini_answer_provider_posts_bounded_request_and_extracts_raw_json(
+    monkeypatch, caplog
+):
+    request = {}
+
+    def fake_post(url, **kwargs):
+        request.update(url=url, **kwargs)
+        return FakeResponse(
+            {
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [
+                                {"text": '{"answer":"grounded","citations":["item-1"]}'}
+                            ]
+                        }
+                    }
+                ]
+            }
+        )
+
+    monkeypatch.setattr("brain_portal.answers.requests.post", fake_post)
+
+    with caplog.at_level(logging.DEBUG):
+        raw, provider = GeminiAnswerProvider(
+            "test-api-key", timeout=7.5, model="gemini-test-model"
+        ).generate("bounded prompt")
+
+    assert provider == "gemini"
+    assert raw == '{"answer":"grounded","citations":["item-1"]}'
+    assert request["url"].endswith("gemini-test-model:generateContent")
+    assert request["params"] == {"key": "test-api-key"}
+    assert request["timeout"] == 7.5
+    assert request["json"]["contents"][0]["parts"][0]["text"] == "bounded prompt"
+    assert request["json"]["generationConfig"]["responseMimeType"] == "application/json"
+    assert caplog.text == ""
+
+
+def test_deepseek_answer_provider_posts_bounded_request_and_extracts_raw_json(
+    monkeypatch, caplog
+):
+    request = {}
+
+    def fake_post(url, **kwargs):
+        request.update(url=url, **kwargs)
+        return FakeResponse(
+            {
+                "choices": [
+                    {
+                        "message": {
+                            "content": '{"answer":"fallback","citations":["item-1"]}'
+                        }
+                    }
+                ]
+            }
+        )
+
+    monkeypatch.setattr("brain_portal.answers.requests.post", fake_post)
+
+    with caplog.at_level(logging.DEBUG):
+        raw, provider = DeepSeekAnswerProvider(
+            "test-api-key", timeout=8.0, model="deepseek-test-model"
+        ).generate("bounded prompt")
+
+    assert provider == "deepseek"
+    assert raw == '{"answer":"fallback","citations":["item-1"]}'
+    assert request["url"] == "https://api.deepseek.com/chat/completions"
+    assert request["headers"] == {"Authorization": "Bearer test-api-key"}
+    assert request["timeout"] == 8.0
+    assert request["json"]["model"] == "deepseek-test-model"
+    assert request["json"]["messages"] == [
+        {"role": "user", "content": "bounded prompt"}
+    ]
+    assert request["json"]["response_format"] == {"type": "json_object"}
+    assert caplog.text == ""
+
+
+@pytest.mark.parametrize("timeout", [0, -1, float("nan"), float("inf")])
+def test_answer_providers_require_finite_positive_timeout(timeout):
+    with pytest.raises(ValueError, match="timeout"):
+        GeminiAnswerProvider("test-api-key", timeout, "gemini-model")
+    with pytest.raises(ValueError, match="timeout"):
+        DeepSeekAnswerProvider("test-api-key", timeout, "deepseek-model")

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import math
 from typing import Protocol
+
+import requests
 
 from brain_portal.models import CitedAnswer, SearchHit
 
@@ -12,6 +15,57 @@ BODY_EXCERPT_LIMIT = 1000
 class AnswerProvider(Protocol):
     def generate(self, prompt: str) -> tuple[str, str]:
         ...
+
+
+class GeminiAnswerProvider:
+    def __init__(self, api_key: str, timeout: float, model: str):
+        self.api_key = _required_value(api_key, "Gemini API key")
+        self.timeout = _positive_timeout(timeout)
+        self.model = _required_value(model, "Gemini model")
+
+    def generate(self, prompt: str) -> tuple[str, str]:
+        response = requests.post(
+            (
+                "https://generativelanguage.googleapis.com/v1beta/models/"
+                f"{self.model}:generateContent"
+            ),
+            params={"key": self.api_key},
+            json={
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {"responseMimeType": "application/json"},
+            },
+            timeout=self.timeout,
+        )
+        response.raise_for_status()
+        text = response.json()["candidates"][0]["content"]["parts"][0]["text"]
+        if not isinstance(text, str):
+            raise ValueError("Gemini answer response text is invalid")
+        return text, "gemini"
+
+
+class DeepSeekAnswerProvider:
+    def __init__(self, api_key: str, timeout: float, model: str):
+        self.api_key = _required_value(api_key, "DeepSeek API key")
+        self.timeout = _positive_timeout(timeout)
+        self.model = _required_value(model, "DeepSeek model")
+
+    def generate(self, prompt: str) -> tuple[str, str]:
+        response = requests.post(
+            "https://api.deepseek.com/chat/completions",
+            headers={"Authorization": f"Bearer {self.api_key}"},
+            json={
+                "model": self.model,
+                "messages": [{"role": "user", "content": prompt}],
+                "response_format": {"type": "json_object"},
+                "temperature": 0.2,
+            },
+            timeout=self.timeout,
+        )
+        response.raise_for_status()
+        text = response.json()["choices"][0]["message"]["content"]
+        if not isinstance(text, str):
+            raise ValueError("DeepSeek answer response text is invalid")
+        return text, "deepseek"
 
 
 def answer_query(
@@ -105,3 +159,16 @@ def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
     if len(value) != len(pairs):
         raise ValueError("duplicate JSON key")
     return value
+
+
+def _required_value(value: str, label: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{label} is required")
+    return value.strip()
+
+
+def _positive_timeout(value: float) -> float:
+    timeout = float(value)
+    if not math.isfinite(timeout) or timeout <= 0:
+        raise ValueError("provider timeout must be positive")
+    return timeout

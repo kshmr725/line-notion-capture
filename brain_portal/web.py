@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Callable, Optional, Protocol
+from urllib.parse import urlparse
 
 from flask import Blueprint, abort, g, render_template, request, url_for
 
@@ -115,10 +116,13 @@ def create_portal_blueprint(dependencies: PortalDependencies) -> Blueprint:
                 )
                 allowed_items = {item.source_id: item for item in items}
                 hits = [
-                    hit
+                    SearchHit(
+                        item=allowed_items[hit.item.source_id],
+                        score=hit.score,
+                        matched_by=hit.matched_by,
+                    )
                     for hit in raw_results.hits
-                    if hit.item.tenant_id == g.portal_tenant.tenant_id
-                    and hit.item.source_id in allowed_items
+                    if hit.item.source_id in allowed_items
                 ]
                 answer = dependencies.answer_service(query, hits) if hits else None
                 view.update(
@@ -238,12 +242,24 @@ def _item_detail(item: KnowledgeItem) -> dict[str, object]:
         body=item.body,
         concepts=item.concepts,
         place=item.place,
-        canonical_ref=item.canonical_ref,
-        source_action=(
-            "Edit in Notion" if item.source_type == "notion" else "Open in Obsidian"
-        ),
+        canonical_action=_canonical_action(item),
     )
     return detail
+
+
+def _canonical_action(item: KnowledgeItem) -> dict[str, str] | None:
+    canonical_ref = item.canonical_ref
+    if not canonical_ref or canonical_ref != canonical_ref.strip():
+        return None
+    parsed = urlparse(canonical_ref)
+    if item.source_type == "obsidian" and parsed.scheme.lower() == "obsidian":
+        return {"url": canonical_ref, "label": "Open in Obsidian"}
+    if item.source_type != "notion" or parsed.scheme.lower() != "https":
+        return None
+    hostname = (parsed.hostname or "").lower().rstrip(".")
+    if hostname != "notion.so" and not hostname.endswith(".notion.so"):
+        return None
+    return {"url": canonical_ref, "label": "Edit in Notion"}
 
 
 def _answer_view(

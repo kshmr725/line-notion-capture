@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import pytest
 
+import portal_app
+from brain_portal.config import PortalSettings
 from brain_portal.models import CitedAnswer, KnowledgeItem, SearchHit, TenantContext
 from brain_portal.search import SearchResults
 from brain_portal.web import PortalDependencies
@@ -280,3 +282,199 @@ def test_place_and_sync_pages_use_reader_facing_states(portal_setup):
     assert "Open source note" in place_html
     assert 'id="sync-status"' in sync_html
     assert "Up to date" in sync_html
+
+
+def test_default_dependencies_wire_hybrid_search_and_ordered_answer_chain(monkeypatch):
+    repository = FakeRepository()
+    embedder = object()
+    gemini_provider = object()
+    deepseek_provider = object()
+    calls = {"hybrid": [], "answer": []}
+
+    monkeypatch.setattr(portal_app, "PortalRepository", lambda path: repository)
+    monkeypatch.setattr(
+        portal_app, "GeminiEmbeddingProvider", lambda key, timeout: embedder
+    )
+    monkeypatch.setattr(
+        portal_app,
+        "GeminiAnswerProvider",
+        lambda key, timeout, model: gemini_provider,
+    )
+    monkeypatch.setattr(
+        portal_app,
+        "DeepSeekAnswerProvider",
+        lambda key, timeout, model: deepseek_provider,
+    )
+
+    def fake_hybrid(repo, active_embedder, tenant_id, query, cloud_key):
+        calls["hybrid"].append(
+            (repo, active_embedder, tenant_id, query, cloud_key)
+        )
+        return SearchResults(())
+
+    def fake_answer(query, hits, providers):
+        calls["answer"].append((query, hits, providers))
+        return None
+
+    monkeypatch.setattr(portal_app, "hybrid_search", fake_hybrid)
+    monkeypatch.setattr(portal_app, "answer_query", fake_answer)
+    settings = PortalSettings(
+        database_path="portal.sqlite3",
+        tenant_id="kevin",
+        gemini_api_key="gemini-test-key",
+        deepseek_api_key="deepseek-test-key",
+        ai_timeout_seconds=9.0,
+        gemini_answer_model="gemini-test-model",
+        deepseek_answer_model="deepseek-test-model",
+    )
+
+    dependencies = portal_app._default_dependencies(settings)
+    dependencies.search_service("kevin", "agents", "ai")
+    dependencies.answer_service("agents", [])
+
+    assert calls["hybrid"] == [
+        (repository, embedder, "kevin", "agents", "ai")
+    ]
+    assert calls["answer"] == [("agents", [], [gemini_provider, deepseek_provider])]
+
+
+def test_default_dependencies_without_keys_are_lexical_degraded_and_source_only(
+    monkeypatch
+):
+    repository = FakeRepository()
+    lexical_hit = SearchHit(item("ai-agent"), 2.0, ("lexical",))
+    repository.lexical_search = lambda tenant_id, query, cloud_key=None: [lexical_hit]
+    monkeypatch.setattr(portal_app, "PortalRepository", lambda path: repository)
+    monkeypatch.setattr(
+        portal_app,
+        "GeminiEmbeddingProvider",
+        lambda *args, **kwargs: pytest.fail("embedding provider must not be created"),
+        raising=False,
+    )
+    settings = PortalSettings(
+        database_path="portal.sqlite3",
+        tenant_id="kevin",
+        gemini_api_key="",
+        deepseek_api_key="",
+    )
+
+    dependencies = portal_app._default_dependencies(settings)
+    results = dependencies.search_service("kevin", "agents", None)
+
+    assert results.hits == (lexical_hit,)
+    assert results.degraded is True
+    assert dependencies.answer_service("agents", [lexical_hit]) is None
+
+
+def test_search_rebuilds_raw_hit_from_repository_before_answer_and_render():
+    repository = FakeRepository()
+    poisoned = item("ai-agent")
+    poisoned = KnowledgeItem(
+        **{
+            **poisoned.__dict__,
+            "title": "INJECTED TITLE",
+            "summary": "INJECTED SUMMARY",
+            "body": "INJECTED BODY",
+        }
+    )
+    captured = []
+
+    def poisoned_search(tenant_id, query, cloud_key):
+        return SearchResults((SearchHit(poisoned, 7.5, ("semantic",)),))
+
+    def capture_answer(query, hits):
+        captured.extend(hits)
+        return None
+
+    app = create_app(
+        dependencies=PortalDependencies(
+            repository, TenantResolver(), poisoned_search, capture_answer
+        )
+    )
+    app.config.update(TESTING=True)
+
+    html = app.test_client().get("/search?q=agent").get_data(as_text=True)
+
+    assert captured == [
+        SearchHit(repository.items[0], 7.5, ("semantic",))
+    ]
+    assert "Reliable agent systems" in html
+    assert "INJECTED" not in html
+
+
+@pytest.mark.parametrize(
+    ("source_type", "canonical_ref"),
+    [
+        ("obsidian", "javascript:alert(1)"),
+        ("obsidian", "https://www.notion.so/page"),
+        ("notion", "http://www.notion.so/page"),
+        ("notion", "https://evilnotion.so/page"),
+        ("notion", "https://notion.so.evil.example/page"),
+        ("notion", "javascript:alert(1)"),
+        ("notion", "data:text/html,bad"),
+        ("notion", "file:///private/note"),
+        ("other", "https://www.notion.so/page"),
+    ],
+)
+def test_item_and_place_hide_untrusted_canonical_actions(source_type, canonical_ref):
+    unsafe = item(
+        "unsafe",
+        source_type=source_type,
+        canonical_ref=canonical_ref,
+        cloud_key="food",
+        place={"name": "Unsafe place"},
+    )
+    repository = FakeRepository()
+    repository.items = [unsafe]
+    app = create_app(
+        dependencies=PortalDependencies(
+            repository, TenantResolver(), SearchService(), AnswerService()
+        )
+    )
+    app.config.update(TESTING=True)
+
+    item_html = app.test_client().get("/item/unsafe").get_data(as_text=True)
+    place_html = app.test_client().get("/place/unsafe").get_data(as_text=True)
+
+    assert canonical_ref not in item_html
+    assert canonical_ref not in place_html
+    assert "Open in Obsidian" not in item_html
+    assert "Edit in Notion" not in item_html
+    assert "Open source note" not in place_html
+
+
+@pytest.mark.parametrize(
+    ("source_type", "canonical_ref", "action"),
+    [
+        ("obsidian", "obsidian://open?vault=Brain&file=note", "Open in Obsidian"),
+        ("notion", "https://notion.so/page", "Edit in Notion"),
+        ("notion", "https://www.notion.so/page", "Edit in Notion"),
+        ("notion", "https://team.notion.so/page", "Edit in Notion"),
+    ],
+)
+def test_item_and_place_allow_only_trusted_canonical_actions(
+    source_type, canonical_ref, action
+):
+    trusted = item(
+        "trusted",
+        source_type=source_type,
+        canonical_ref=canonical_ref,
+        cloud_key="food",
+        place={"name": "Trusted place"},
+    )
+    repository = FakeRepository()
+    repository.items = [trusted]
+    app = create_app(
+        dependencies=PortalDependencies(
+            repository, TenantResolver(), SearchService(), AnswerService()
+        )
+    )
+    app.config.update(TESTING=True)
+
+    item_html = app.test_client().get("/item/trusted").get_data(as_text=True)
+    place_html = app.test_client().get("/place/trusted").get_data(as_text=True)
+
+    assert action in item_html
+    assert canonical_ref.replace("&", "&amp;") in item_html
+    assert "Open source note" in place_html
+    assert canonical_ref.replace("&", "&amp;") in place_html

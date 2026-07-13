@@ -30,7 +30,9 @@
       {% for concept in item.concepts %}<span>{{ concept }}</span>{% endfor %}
     </div>
     {% endif %}
-    <a class="primary-action" href="{{ item.canonical_ref }}">{{ item.source_action }}</a>
+    {% if item.canonical_action %}
+    <a class="primary-action" href="{{ item.canonical_action.url }}">{{ item.canonical_action.label }}</a>
+    {% endif %}
   </aside>
 </article>
 {% endblock %}
