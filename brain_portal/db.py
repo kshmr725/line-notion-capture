@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Sequence, Union
 
 from brain_portal.embeddings import cosine_similarity
-from brain_portal.models import KnowledgeItem, SearchHit
+from brain_portal.models import KnowledgeItem, SearchHit, SyncRun
 
 
 PathLike = Union[str, os.PathLike[str]]
@@ -447,6 +447,48 @@ class PortalRepository:
                 (tenant_id,),
             ).fetchall()
             return [self._item_from_row(connection, row) for row in rows]
+        finally:
+            connection.close()
+
+    def get_item(self, tenant_id: str, source_id: str) -> KnowledgeItem | None:
+        connection = portal_connect(self.path)
+        try:
+            row = connection.execute(
+                """
+                SELECT *
+                FROM knowledge_items
+                WHERE tenant_id = ? AND source_id = ? AND deleted_at IS NULL
+                """,
+                (tenant_id, source_id),
+            ).fetchone()
+            return self._item_from_row(connection, row) if row is not None else None
+        finally:
+            connection.close()
+
+    def latest_sync(
+        self, tenant_id: str, source_type: str | None = None
+    ) -> SyncRun | None:
+        connection = portal_connect(self.path)
+        try:
+            row = connection.execute(
+                """
+                SELECT source_type, status, finished_at
+                FROM sync_runs
+                WHERE tenant_id = ?
+                  AND (? IS NULL OR source_type = ?)
+                  AND finished_at IS NOT NULL
+                ORDER BY finished_at DESC
+                LIMIT 1
+                """,
+                (tenant_id, source_type, source_type),
+            ).fetchone()
+            if row is None:
+                return None
+            return SyncRun(
+                source_type=row["source_type"],
+                status=row["status"],
+                finished_at=row["finished_at"],
+            )
         finally:
             connection.close()
 

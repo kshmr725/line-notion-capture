@@ -48,6 +48,13 @@ class SearchHit:
 
 
 @dataclass(frozen=True)
+class SyncRun:
+    source_type: str
+    status: str
+    finished_at: str | None
+
+
+@dataclass(frozen=True)
 class CitedAnswer:
     text: str
     source_ids: tuple[str, ...]

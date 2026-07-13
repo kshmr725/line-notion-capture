@@ -9,13 +9,32 @@ from urllib.parse import urlencode, urlparse
 
 from flask import Blueprint, abort, g, render_template, request, url_for
 
-from brain_portal.models import CitedAnswer, KnowledgeItem, SearchHit, TenantContext
+from brain_portal.models import (
+    CitedAnswer,
+    KnowledgeItem,
+    SearchHit,
+    SyncRun,
+    TenantContext,
+)
 from brain_portal.answers import QUERY_LIMIT
 from brain_portal.search import SearchResults
 
 
+SYNC_STATUS_LABELS = {
+    "running": "Syncing",
+    "success": "Up to date",
+    "stale": "Stale",
+    "permission_required": "Permission required",
+}
+
+
 class ItemRepository(Protocol):
     def list_items(self, tenant_id: str) -> list[KnowledgeItem]:
+        ...
+
+    def latest_sync(
+        self, tenant_id: str, source_type: str | None = None
+    ) -> SyncRun | None:
         ...
 
 
@@ -219,11 +238,15 @@ def create_portal_blueprint(dependencies: PortalDependencies) -> Blueprint:
         item = _find_item(items, source_id)
         if item is None:
             abort(404)
+        detail = _item_detail(item)
+        detail["sync_status"] = _sync_status_label(
+            dependencies, g.portal_tenant.tenant_id, item
+        )
         return render_template(
             "portal/item.html",
             page_title=item.title,
             tenant=_tenant_view(),
-            item=_item_detail(item),
+            item=detail,
             breadcrumbs=_breadcrumbs(item),
             related=[
                 _item_card(candidate)
@@ -317,6 +340,18 @@ def _item_detail(item: KnowledgeItem) -> dict[str, object]:
         maps_action=_maps_action(item.place),
     )
     return detail
+
+
+def _sync_status_label(
+    dependencies: PortalDependencies, tenant_id: str, item: KnowledgeItem
+) -> str | None:
+    try:
+        sync = dependencies.repository.latest_sync(tenant_id, item.source_type)
+    except Exception:
+        raise PortalDataUnavailable() from None
+    if sync is None:
+        return None
+    return SYNC_STATUS_LABELS.get(sync.status)
 
 
 def _breadcrumbs(item: KnowledgeItem) -> list[dict[str, str | None]]:

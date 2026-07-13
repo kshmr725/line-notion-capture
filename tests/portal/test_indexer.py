@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 from dataclasses import replace
 from typing import get_type_hints
@@ -9,6 +11,7 @@ from brain_portal.connectors.base import SourceConnector
 from brain_portal.indexer import (
     EmbeddingProvider,
     IndexReport,
+    index_document,
     normalize_document,
     run_index,
 )
@@ -47,18 +50,21 @@ def document(
     source_id: str = "50_Tech_AI自動化/Agent.md",
     revision: str = "rev-1",
     body: str = "# Agent\n\nAgent workflow",
+    source_type: str = "obsidian",
+    tenant_id: str = "kevin",
+    metadata: dict[str, object] | None = None,
 ) -> SourceDocument:
     return SourceDocument(
-        tenant_id="kevin",
+        tenant_id=tenant_id,
         source_id=source_id,
-        source_type="obsidian",
+        source_type=source_type,
         canonical_ref=f"obsidian://{source_id}",
         title="Agent",
         body=body,
         cloud_key="ai",
         source_revision=revision,
         updated_at="2026-07-13T00:00:00+00:00",
-        metadata={"concepts": ("AI Agents",)},
+        metadata=metadata if metadata is not None else {"concepts": ("AI Agents",)},
     )
 
 
@@ -294,6 +300,112 @@ def test_embedding_write_failure_rolls_back_the_entire_projection(portal_repo):
         connection.close()
     assert sync["status"] == "stale"
     assert "forced embedding persistence failure" in sync["error_summary"]
+
+
+def test_normalize_document_prefers_explicit_metadata_summary_when_present():
+    doc = document(
+        body="# Heading\n\nFirst paragraph\n\nSecond paragraph",
+        metadata={"summary": "  Guided summary from Notion.  ", "concepts": ("agents",)},
+    )
+
+    item = normalize_document(doc)
+
+    assert item.summary == "Guided summary from Notion."
+
+
+def test_normalize_document_falls_back_when_metadata_summary_is_blank():
+    doc = document(
+        body="# Heading\n\nFirst paragraph",
+        metadata={"summary": "   ", "concepts": ()},
+    )
+
+    item = normalize_document(doc)
+
+    assert item.summary == "First paragraph"
+
+
+def test_index_document_indexes_and_is_idempotent(portal_repo, fake_embedder):
+    doc = document(source_id="page-1", source_type="notion", revision="rev-1")
+
+    first = index_document("kevin", doc, portal_repo, fake_embedder)
+    second = index_document("kevin", doc, portal_repo, fake_embedder)
+
+    assert first == IndexReport(indexed=1, unchanged=0, deleted=0, failed=0)
+    assert second == IndexReport(indexed=0, unchanged=1, deleted=0, failed=0)
+    assert len(portal_repo.list_items("kevin")) == 1
+    assert len(fake_embedder.calls) == 1
+
+
+def test_index_document_reindexes_a_changed_revision(portal_repo, fake_embedder):
+    index_document(
+        "kevin",
+        document(source_id="page-1", source_type="notion", revision="rev-1"),
+        portal_repo,
+        fake_embedder,
+    )
+
+    report = index_document(
+        "kevin",
+        document(
+            source_id="page-1",
+            source_type="notion",
+            revision="rev-2",
+            body="changed body",
+        ),
+        portal_repo,
+        fake_embedder,
+    )
+
+    assert report == IndexReport(indexed=1, unchanged=0, deleted=0, failed=0)
+    assert portal_repo.get_item("kevin", "page-1").source_revision == "rev-2"
+
+
+def test_index_document_without_an_embedder_stores_a_lexical_only_chunk(portal_repo):
+    doc = document(source_id="page-1", source_type="notion")
+
+    report = index_document("kevin", doc, portal_repo, None)
+
+    assert report == IndexReport(indexed=1, unchanged=0, deleted=0, failed=0)
+    connection = portal_connect(portal_repo.path)
+    try:
+        chunk = connection.execute(
+            "SELECT embedding_json FROM knowledge_chunks WHERE tenant_id = ?",
+            ("kevin",),
+        ).fetchone()
+    finally:
+        connection.close()
+    assert chunk["embedding_json"] is None
+    assert [hit.item.title for hit in portal_repo.lexical_search("kevin", "Agent")] == [
+        "Agent"
+    ]
+
+
+def test_index_document_marks_permission_required_on_permission_error(
+    portal_repo, fake_embedder
+):
+    class DeniedEmbedder:
+        model_id = "fake-embedding"
+        dimensions = 2
+
+        def embed(self, text, task_type):
+            raise PermissionError("Notion access was denied")
+
+    doc = document(source_id="page-1", source_type="notion")
+
+    report = index_document("kevin", doc, portal_repo, DeniedEmbedder())
+
+    assert report == IndexReport(indexed=0, unchanged=0, deleted=0, failed=1)
+    sync = portal_repo.latest_sync("kevin", "notion")
+    assert sync.status == "permission_required"
+
+
+def test_index_document_rejects_mismatched_trusted_tenant(portal_repo, fake_embedder):
+    doc = document(source_id="page-1", source_type="notion", tenant_id="attacker")
+
+    with pytest.raises(ValueError, match="trusted tenant_id"):
+        index_document("kevin", doc, portal_repo, fake_embedder)
+
+    assert portal_repo.list_items("kevin") == []
 
 
 def _projection_snapshot(repo):

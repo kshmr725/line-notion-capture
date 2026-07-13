@@ -2,7 +2,7 @@ from dataclasses import replace
 
 import pytest
 
-from brain_portal.db import PortalRepository, init_portal_db
+from brain_portal.db import PortalRepository, init_portal_db, portal_connect
 from brain_portal.models import KnowledgeItem
 
 
@@ -113,3 +113,81 @@ def test_fts_match_rank_and_relations_are_tenant_scoped(tmp_path):
     assert repo.list_items("tenant-a")[0].place == {"name": "A private place"}
     assert repo.list_items("tenant-b")[0].concepts == ("B private concept",)
     assert repo.list_items("tenant-b")[0].place == {"name": "B private place"}
+
+
+def test_get_item_returns_the_matching_tenant_item(tmp_path):
+    path = tmp_path / "portal.sqlite3"
+    init_portal_db(path)
+    repo = PortalRepository(path)
+    repo.upsert_item("tenant-a", item("tenant-a", "page-1", "A note"), chunks=[])
+    repo.upsert_item("tenant-b", item("tenant-b", "page-1", "B note"), chunks=[])
+
+    assert repo.get_item("tenant-a", "page-1").title == "A note"
+    assert repo.get_item("tenant-b", "page-1").title == "B note"
+
+
+def test_get_item_returns_none_when_missing_or_wrong_tenant(tmp_path):
+    path = tmp_path / "portal.sqlite3"
+    init_portal_db(path)
+    repo = PortalRepository(path)
+    repo.upsert_item("tenant-a", item("tenant-a", "page-1", "A note"), chunks=[])
+
+    assert repo.get_item("tenant-a", "missing") is None
+    assert repo.get_item("tenant-b", "page-1") is None
+
+
+def _record_sync_run(
+    path, tenant_id: str, run_id: str, source_type: str, status: str, finished_at: str
+) -> None:
+    connection = portal_connect(path)
+    try:
+        with connection:
+            connection.execute(
+                """
+                INSERT INTO tenants (tenant_id, display_name)
+                VALUES (?, ?)
+                ON CONFLICT (tenant_id) DO NOTHING
+                """,
+                (tenant_id, tenant_id),
+            )
+            connection.execute(
+                """
+                INSERT INTO sync_runs (
+                    tenant_id, run_id, source_type, status, started_at, finished_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (tenant_id, run_id, source_type, status, finished_at, finished_at),
+            )
+    finally:
+        connection.close()
+
+
+def test_latest_sync_returns_the_most_recent_finished_run_for_a_source_type(tmp_path):
+    path = tmp_path / "portal.sqlite3"
+    init_portal_db(path)
+    repo = PortalRepository(path)
+    _record_sync_run(
+        path, "kevin", "run-1", "notion", "success", "2026-07-13T10:00:00+00:00"
+    )
+    _record_sync_run(
+        path, "kevin", "run-2", "notion", "stale", "2026-07-13T11:00:00+00:00"
+    )
+    _record_sync_run(
+        path, "kevin", "run-3", "obsidian", "success", "2026-07-13T12:00:00+00:00"
+    )
+
+    sync = repo.latest_sync("kevin", "notion")
+
+    assert sync.status == "stale"
+    assert sync.source_type == "notion"
+
+
+def test_latest_sync_ignores_other_tenants_and_missing_runs(tmp_path):
+    path = tmp_path / "portal.sqlite3"
+    init_portal_db(path)
+    repo = PortalRepository(path)
+    _record_sync_run(
+        path, "other-tenant", "run-1", "notion", "success", "2026-07-13T10:00:00+00:00"
+    )
+
+    assert repo.latest_sync("kevin", "notion") is None

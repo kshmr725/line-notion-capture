@@ -30,7 +30,12 @@ class IndexReport:
 
 def normalize_document(doc: SourceDocument) -> KnowledgeItem:
     paragraphs = [part.strip() for part in doc.body.split("\n\n") if part.strip()]
-    summary = next((p for p in paragraphs if not p.startswith("#")), doc.title)[:500]
+    metadata_summary = doc.metadata.get("summary")
+    summary = (
+        metadata_summary.strip()[:500]
+        if isinstance(metadata_summary, str) and metadata_summary.strip()
+        else next((p for p in paragraphs if not p.startswith("#")), doc.title)[:500]
+    )
     return KnowledgeItem(
         tenant_id=doc.tenant_id,
         source_id=doc.source_id,
@@ -172,6 +177,82 @@ def run_index(
         report,
         _join_diagnostics(diagnostics),
     )
+    return report
+
+
+def index_document(
+    tenant_id: str,
+    doc: SourceDocument,
+    repo: PortalRepository,
+    embedder: EmbeddingProvider | None,
+) -> IndexReport:
+    if not tenant_id.strip():
+        raise ValueError("trusted tenant_id is required")
+    if doc.tenant_id != tenant_id:
+        raise ValueError("document tenant_id does not match trusted tenant_id")
+    source_type = doc.source_type.strip()
+    if not source_type:
+        raise ValueError("document source_type is required")
+
+    run_id = _begin_sync(repo, tenant_id, source_type)
+    existing = repo.get_item(tenant_id, doc.source_id)
+    if existing is not None and existing.source_revision == doc.source_revision:
+        report = IndexReport(indexed=0, unchanged=1, deleted=0, failed=0)
+        _finish_sync(repo, tenant_id, run_id, "success", report)
+        return report
+
+    try:
+        item = normalize_document(doc)
+        chunks = _chunk_item(item)
+        embeddings = None
+        model_id = None
+        if embedder is not None:
+            model_id, dimensions = _embedding_space(embedder)
+            embeddings = [
+                [float(value) for value in embedder.embed(chunk, "RETRIEVAL_DOCUMENT")]
+                for chunk in chunks
+            ]
+            if any(
+                len(embedding) != dimensions
+                or not all(math.isfinite(value) for value in embedding)
+                for embedding in embeddings
+            ):
+                raise ValueError("embedding vector does not match provider space")
+        connection = portal_connect(repo.path)
+        try:
+            with connection:
+                repo.upsert_item(tenant_id, item, chunks, connection=connection)
+                if embeddings is not None:
+                    _persist_embeddings(
+                        connection, tenant_id, item.source_id, embeddings, model_id
+                    )
+        finally:
+            connection.close()
+    except PermissionError as error:
+        report = IndexReport(indexed=0, unchanged=0, deleted=0, failed=1)
+        _finish_sync(
+            repo,
+            tenant_id,
+            run_id,
+            "permission_required",
+            report,
+            _bounded_diagnostic(type(error).__name__, str(error)),
+        )
+        return report
+    except Exception as error:
+        report = IndexReport(indexed=0, unchanged=0, deleted=0, failed=1)
+        _finish_sync(
+            repo,
+            tenant_id,
+            run_id,
+            "stale",
+            report,
+            _bounded_diagnostic(type(error).__name__, str(error)),
+        )
+        return report
+
+    report = IndexReport(indexed=1, unchanged=0, deleted=0, failed=0)
+    _finish_sync(repo, tenant_id, run_id, "success", report)
     return report
 
 

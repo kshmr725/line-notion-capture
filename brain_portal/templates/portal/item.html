@@ -9,7 +9,7 @@
   <header class="item-header">
     <p class="eyebrow">{{ item.cloud_key }} · {{ item.item_type }}</p>
     <h1>{{ item.title }}</h1>
-    <p class="freshness">{{ item.reading_time }} min read · {{ item.confidence }} · Updated {{ item.updated_at }}</p>
+    <p class="freshness">{{ item.reading_time }} min read · {{ item.confidence }} · Updated {{ item.updated_at }}{% if item.sync_status %} · <span class="sync-status">{{ item.sync_status }}</span>{% endif %}</p>
   </header>
 
   <section id="item-answer" class="answer-panel" aria-labelledby="item-answer-title">

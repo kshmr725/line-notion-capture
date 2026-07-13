@@ -6,7 +6,13 @@ import pytest
 
 import portal_app
 from brain_portal.config import PortalSettings
-from brain_portal.models import CitedAnswer, KnowledgeItem, SearchHit, TenantContext
+from brain_portal.models import (
+    CitedAnswer,
+    KnowledgeItem,
+    SearchHit,
+    SyncRun,
+    TenantContext,
+)
 from brain_portal.search import SearchResults
 from brain_portal.web import PortalDependencies
 from portal_app import create_app
@@ -65,10 +71,14 @@ class FakeRepository:
             item("secret", tenant_id="other-tenant"),
         ]
         self.tenant_calls = []
+        self.sync_by_type = {}
 
     def list_items(self, tenant_id: str):
         self.tenant_calls.append(tenant_id)
         return list(self.items)
+
+    def latest_sync(self, tenant_id: str, source_type: str | None = None):
+        return self.sync_by_type.get(source_type)
 
 
 class TenantResolver:
@@ -677,3 +687,54 @@ def test_over_limit_search_query_returns_designed_400_without_services(portal_se
     assert "SECRET_TAIL" not in html
     assert search.calls == []
     assert answers.calls == []
+
+
+@pytest.mark.parametrize(
+    ("status", "label"),
+    [
+        ("running", "Syncing"),
+        ("success", "Up to date"),
+        ("stale", "Stale"),
+        ("permission_required", "Permission required"),
+    ],
+)
+def test_item_shows_derived_sync_status_label(portal_setup, status, label):
+    client, repository, *_ = portal_setup
+    repository.sync_by_type["obsidian"] = SyncRun(
+        source_type="obsidian", status=status, finished_at="2026-07-13T12:00:00+00:00"
+    )
+
+    html = client.get("/item/ai-agent").get_data(as_text=True)
+
+    assert label in html
+
+
+def test_item_hides_sync_status_badge_when_no_sync_recorded(portal_setup):
+    client, *_ = portal_setup
+
+    html = client.get("/item/ai-agent").get_data(as_text=True)
+
+    assert "Syncing" not in html
+    assert "Up to date" not in html
+    assert "Stale" not in html
+    assert "Permission required" not in html
+
+
+def test_item_returns_bounded_503_when_sync_status_lookup_fails():
+    class FailingSyncRepository(FakeRepository):
+        def latest_sync(self, tenant_id, source_type=None):
+            raise RuntimeError("private database path and row detail")
+
+    app = create_app(
+        dependencies=PortalDependencies(
+            FailingSyncRepository(), TenantResolver(), SearchService(), AnswerService()
+        )
+    )
+    app.config.update(TESTING=True)
+
+    response = app.test_client().get("/item/ai-agent")
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 503
+    assert 'id="service-unavailable"' in html
+    assert "private database" not in html
