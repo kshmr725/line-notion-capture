@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 import pytest
 
 import portal_app
@@ -18,6 +20,10 @@ def item(
     canonical_ref: str | None = None,
     cloud_key: str = "ai",
     place: dict[str, object] | None = None,
+    item_type: str = "research",
+    concepts: tuple[str, ...] = ("agents", "reliability"),
+    updated_at: str = "2026-07-13T10:30:00+00:00",
+    body: str = "Evidence, observations, and practical next steps.",
 ) -> KnowledgeItem:
     return KnowledgeItem(
         tenant_id=tenant_id,
@@ -31,13 +37,13 @@ def item(
             "food-place": "Quiet noodle shop",
         }.get(source_id, "Private note"),
         summary="A source-backed summary for this note.",
-        body="Evidence, observations, and practical next steps.",
+        body=body,
         cloud_key=cloud_key,
-        item_type="research",
-        concepts=("agents", "reliability"),
+        item_type=item_type,
+        concepts=concepts,
         place=place,
         source_revision="rev-1",
-        updated_at="2026-07-13T10:30:00+00:00",
+        updated_at=updated_at,
     )
 
 
@@ -478,3 +484,196 @@ def test_item_and_place_allow_only_trusted_canonical_actions(
     assert canonical_ref.replace("&", "&amp;") in item_html
     assert "Open source note" in place_html
     assert canonical_ref.replace("&", "&amp;") in place_html
+
+
+def test_search_get_filters_change_hits_and_retain_all_filter_state():
+    repository = FakeRepository()
+    repository.items = [
+        item("ai-agent", item_type="method", concepts=("agents",)),
+        item(
+            "food-place",
+            cloud_key="food",
+            item_type="place",
+            concepts=("restaurants",),
+            place={"name": "Quiet noodle shop", "area": "Da'an"},
+        ),
+        item(
+            "old-food",
+            cloud_key="food",
+            item_type="place",
+            concepts=("restaurants",),
+            place={"name": "Old cafe"},
+            updated_at="2020-01-01T00:00:00+00:00",
+        ),
+    ]
+
+    def all_hits(tenant_id, query, cloud_key):
+        return SearchResults(
+            tuple(SearchHit(entry, 1.0, ("lexical",)) for entry in repository.items)
+        )
+
+    app = create_app(
+        dependencies=PortalDependencies(
+            repository, TenantResolver(), all_hits, AnswerService(False)
+        )
+    )
+    app.config.update(TESTING=True)
+
+    response = app.test_client().get(
+        "/search?q=food&cloud=food&type=place&concept=restaurants&freshness=7d&place=with_place"
+    )
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert 'method="get"' in html
+    for control in ("search-cloud", "search-type", "search-concept", "search-freshness", "search-place"):
+        assert f'id="{control}"' in html
+    assert '<option value="food" selected>' in html
+    assert '<option value="place" selected>' in html
+    assert '<option value="restaurants" selected>' in html
+    assert '<option value="7d" selected>' in html
+    assert '<option value="with_place" selected>' in html
+    assert 'data-source-id="food-place"' in html
+    assert 'data-source-id="ai-agent"' not in html
+    assert 'data-source-id="old-food"' not in html
+
+
+def test_cloud_filters_are_real_search_links_and_javascript_has_no_dead_toggle(portal_setup):
+    client, *_ = portal_setup
+
+    html = client.get("/cloud/ai").get_data(as_text=True)
+    javascript = client.get("/portal-static/portal.js").get_data(as_text=True)
+
+    assert '<a class="filter-pill"' in html
+    assert 'href="/search?q=Tool&amp;cloud=ai"' in html
+    assert "data-filter" not in html
+    assert "[data-filter]" not in javascript
+    assert 'setAttribute("aria-pressed"' not in javascript
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/", "/search?q=agent", "/cloud/ai", "/item/ai-agent", "/place/food-place", "/sync"],
+)
+def test_repository_failure_returns_bounded_designed_503(path):
+    class FailingRepository:
+        def list_items(self, tenant_id):
+            raise RuntimeError("private database path and row detail")
+
+    app = create_app(
+        dependencies=PortalDependencies(
+            FailingRepository(), TenantResolver(), SearchService(), AnswerService()
+        )
+    )
+    app.config.update(TESTING=True)
+
+    response = app.test_client().get(path)
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 503
+    assert html.count("<h1") == 1
+    assert 'id="service-unavailable"' in html
+    assert "Your notes are temporarily unavailable. Try again in a moment." in html
+    assert "private database" not in html
+
+
+def test_item_view_derives_reader_context_and_same_cloud_relations():
+    repository = FakeRepository()
+    repository.items = [
+        item(
+            "ai-agent",
+            body="First practical point.\n\nSecond supporting point with more detail.",
+        ),
+        item("related-agent"),
+        item("food-place", cloud_key="food", place={"name": "Cafe"}),
+    ]
+    app = create_app(
+        dependencies=PortalDependencies(
+            repository, TenantResolver(), SearchService(), AnswerService()
+        )
+    )
+    app.config.update(TESTING=True)
+
+    html = app.test_client().get("/item/ai-agent").get_data(as_text=True)
+
+    assert 'aria-label="Breadcrumb"' in html
+    assert "1 min read" in html
+    assert "Source-backed" in html
+    assert 'id="key-takeaways"' in html
+    assert "First practical point." in html
+    assert 'id="related-notes"' in html
+    assert 'data-source-id="related-agent"' in html
+    assert 'data-source-id="food-place"' not in html
+    assert "%" not in html
+
+
+def test_cloud_derives_related_concepts_and_adjacent_clouds(portal_setup):
+    client, *_ = portal_setup
+
+    html = client.get("/cloud/ai").get_data(as_text=True)
+
+    assert 'id="related-concepts"' in html
+    assert "agents" in html
+    assert "reliability" in html
+    assert 'id="adjacent-clouds"' in html
+    assert 'href="/cloud/food"' in html
+
+
+def test_place_builds_bounded_encoded_google_maps_search_action():
+    repository = FakeRepository()
+    repository.items = [
+        item(
+            "map-place",
+            cloud_key="food",
+            place={
+                "name": "Cafe & Bar" + "N" * 140 + "SECRET_TAIL",
+                "address": "1 Main St / Taipei",
+            },
+        )
+    ]
+    app = create_app(
+        dependencies=PortalDependencies(
+            repository, TenantResolver(), SearchService(), AnswerService()
+        )
+    )
+    app.config.update(TESTING=True)
+
+    html = app.test_client().get("/place/map-place").get_data(as_text=True)
+    maps_href = re.search(r'href="(https://maps\.google\.com/\?q=[^"]+)"', html)
+
+    assert maps_href is not None
+    assert maps_href.group(1).startswith("https://maps.google.com/?q=Cafe+%26+Bar")
+    assert "1+Main+St+%2F+Taipei" in maps_href.group(1)
+    assert "SECRET_TAIL" not in maps_href.group(1)
+    assert "Search in Google Maps" in html
+
+
+def test_place_without_name_or_address_hides_maps_action():
+    repository = FakeRepository()
+    repository.items = [item("map-place", cloud_key="food", place={})]
+    app = create_app(
+        dependencies=PortalDependencies(
+            repository, TenantResolver(), SearchService(), AnswerService()
+        )
+    )
+    app.config.update(TESTING=True)
+
+    html = app.test_client().get("/place/map-place").get_data(as_text=True)
+
+    assert "maps.google.com" not in html
+    assert "Search in Google Maps" not in html
+
+
+def test_over_limit_search_query_returns_designed_400_without_services(portal_setup):
+    client, _, _, search, answers = portal_setup
+
+    response = client.get("/search?q=" + "q" * 501 + "SECRET_TAIL")
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 400
+    assert 'id="query-too-long"' in html
+    assert "Keep your search to 500 characters or fewer." in html
+    assert 'maxlength="500"' in html
+    assert "SECRET_TAIL" not in html
+    assert search.calls == []
+    assert answers.calls == []

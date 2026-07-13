@@ -16,6 +16,9 @@
     {% if item.canonical_action %}
     <a class="primary-action" href="{{ item.canonical_action.url }}">Open source note</a>
     {% endif %}
+    {% if item.maps_action %}
+    <a class="primary-action secondary-action" href="{{ item.maps_action.url }}">{{ item.maps_action.label }}</a>
+    {% endif %}
   </section>
 </article>
 {% endblock %}

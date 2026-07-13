@@ -46,12 +46,20 @@ select {
 }
 
 button,
+.wordmark,
+.source-card h3 a,
 .primary-action,
 .intent-pill,
 .citation-pill,
 .nav-links a,
 .source-card-actions a {
   min-height: 44px;
+}
+
+.wordmark,
+.source-card h3 a {
+  display: inline-flex;
+  align-items: center;
 }
 
 :focus-visible {
@@ -485,6 +493,27 @@ button:hover,
   background: var(--surface);
 }
 
+.breadcrumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.breadcrumbs > * + *::before {
+  margin-right: 8px;
+  content: "/";
+}
+
+.secondary-action {
+  margin-left: 8px;
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--accent);
+}
+
 .search-controls button {
   align-self: end;
   margin-bottom: 24px;
@@ -660,8 +689,12 @@ dd {
   }
 
   .search-controls {
-    grid-template-columns: minmax(0, 1fr) 220px auto;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     align-items: end;
+  }
+
+  .search-controls .query-field {
+    grid-column: span 2;
   }
 
   .search-controls .form-status {

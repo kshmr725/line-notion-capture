@@ -7,7 +7,7 @@
     <p>{{ cloud.description }}</p>
     <form class="search-bar cloud-search" action="{{ url_for('portal.search') }}" method="get" data-search-form data-loading-copy="Searching this Cloud">
       <label for="cloud-query">Search within {{ cloud.name }}</label>
-      <input id="cloud-query" name="q" type="search" placeholder="Ask within this context">
+      <input id="cloud-query" name="q" type="search" maxlength="500" placeholder="Ask within this context">
       <input name="cloud" type="hidden" value="{{ cloud.key }}">
       <button type="submit">Search Cloud</button>
       <span class="form-status" aria-live="polite" data-search-status></span>
@@ -21,10 +21,24 @@
     </div>
     <div class="filter-row" role="group" aria-label="Cloud filters">
       {% for filter in cloud.filters %}
-      <button class="filter-pill" type="button" aria-pressed="false" data-filter>{{ filter }}</button>
+      <a class="filter-pill" href="{{ filter.url }}">{{ filter.label }}</a>
       {% endfor %}
     </div>
   </section>
+
+  {% if concepts %}
+  <section id="related-concepts" class="flow-section" aria-labelledby="concept-title">
+    <div class="section-heading"><h2 id="concept-title">Related concepts</h2></div>
+    <div class="concept-row">{% for concept in concepts %}<span>{{ concept }}</span>{% endfor %}</div>
+  </section>
+  {% endif %}
+
+  {% if adjacent_clouds %}
+  <section id="adjacent-clouds" class="flow-section" aria-labelledby="adjacent-title">
+    <div class="section-heading"><h2 id="adjacent-title">Adjacent Clouds</h2></div>
+    <div class="intent-row">{% for adjacent in adjacent_clouds %}<a class="intent-pill" href="{{ adjacent.url }}">{{ adjacent.name }}</a>{% endfor %}</div>
+  </section>
+  {% endif %}
 
   <section id="featured-paths" class="flow-section" aria-labelledby="path-title">
     <div class="section-heading">

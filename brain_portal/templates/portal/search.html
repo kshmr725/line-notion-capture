@@ -9,7 +9,36 @@
   <form class="search-bar search-controls" action="{{ url_for('portal.search') }}" method="get" data-search-form data-loading-copy="Searching your brain">
     <div class="control-field query-field">
       <label for="search-query">Search query</label>
-      <input id="search-query" name="q" type="search" value="{{ view.query }}" placeholder="Ask a question or name a topic">
+      <input id="search-query" name="q" type="search" maxlength="500" value="{{ view.query }}" placeholder="Ask a question or name a topic">
+    </div>
+    <div class="control-field">
+      <label for="search-type">Type</label>
+      <select id="search-type" name="type">
+        <option value="">All types</option>
+        {% for value in view.types %}<option value="{{ value }}" {% if view.item_type == value %}selected{% endif %}>{{ value|title }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="control-field">
+      <label for="search-concept">Concept</label>
+      <select id="search-concept" name="concept">
+        <option value="">All concepts</option>
+        {% for value in view.concepts %}<option value="{{ value }}" {% if view.concept == value %}selected{% endif %}>{{ value }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="control-field">
+      <label for="search-freshness">Freshness</label>
+      <select id="search-freshness" name="freshness">
+        <option value="">Any time</option>
+        <option value="7d" {% if view.freshness == '7d' %}selected{% endif %}>Past 7 days</option>
+        <option value="30d" {% if view.freshness == '30d' %}selected{% endif %}>Past 30 days</option>
+      </select>
+    </div>
+    <div class="control-field">
+      <label for="search-place">Place</label>
+      <select id="search-place" name="place">
+        <option value="">All notes</option>
+        <option value="with_place" {% if view.place_filter == 'with_place' %}selected{% endif %}>Places only</option>
+      </select>
     </div>
     <div class="control-field cloud-field">
       <label for="search-cloud">Cloud</label>
@@ -24,7 +53,12 @@
     <span class="form-status" aria-live="polite" data-search-status></span>
   </form>
 
-  {% if view.error %}
+  {% if view.query_too_long %}
+  <section id="query-too-long" class="state-card error-state" aria-live="polite">
+    <h2>Shorten this search</h2>
+    <p>Keep your search to 500 characters or fewer.</p>
+  </section>
+  {% elif view.error %}
   <section id="search-error-state" class="state-card error-state" aria-live="polite">
     <h2>Search needs another moment</h2>
     <p>Search is temporarily unavailable. Try again in a moment.</p>

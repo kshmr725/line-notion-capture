@@ -246,7 +246,9 @@ def test_gemini_answer_provider_posts_bounded_request_and_extracts_raw_json(
     assert provider == "gemini"
     assert raw == '{"answer":"grounded","citations":["item-1"]}'
     assert request["url"].endswith("gemini-test-model:generateContent")
-    assert request["params"] == {"key": "test-api-key"}
+    assert request["headers"] == {"x-goog-api-key": "test-api-key"}
+    assert "params" not in request
+    assert "test-api-key" not in request["url"]
     assert request["timeout"] == 7.5
     assert request["json"]["contents"][0]["parts"][0]["text"] == "bounded prompt"
     assert request["json"]["generationConfig"]["responseMimeType"] == "application/json"
@@ -298,3 +300,10 @@ def test_answer_providers_require_finite_positive_timeout(timeout):
         GeminiAnswerProvider("test-api-key", timeout, "gemini-model")
     with pytest.raises(ValueError, match="timeout"):
         DeepSeekAnswerProvider("test-api-key", timeout, "deepseek-model")
+
+
+def test_answer_query_rejects_over_limit_query_without_calling_provider():
+    provider = FakeProvider(response())
+
+    assert answer_query("q" * 501, [hit()], [provider]) is None
+    assert provider.prompts == []

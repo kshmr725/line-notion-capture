@@ -10,6 +10,7 @@ from brain_portal.models import CitedAnswer, SearchHit
 
 
 BODY_EXCERPT_LIMIT = 1000
+QUERY_LIMIT = 500
 
 
 class AnswerProvider(Protocol):
@@ -29,7 +30,7 @@ class GeminiAnswerProvider:
                 "https://generativelanguage.googleapis.com/v1beta/models/"
                 f"{self.model}:generateContent"
             ),
-            params={"key": self.api_key},
+            headers={"x-goog-api-key": self.api_key},
             json={
                 "contents": [{"parts": [{"text": prompt}]}],
                 "generationConfig": {"responseMimeType": "application/json"},
@@ -73,7 +74,7 @@ def answer_query(
     hits: list[SearchHit],
     provider_chain: list[AnswerProvider],
 ) -> CitedAnswer | None:
-    if not hits:
+    if not hits or len(query) > QUERY_LIMIT:
         return None
 
     allowed_source_ids = {hit.item.source_id for hit in hits}

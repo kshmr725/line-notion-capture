@@ -134,8 +134,14 @@ def test_css_encodes_focus_touch_responsive_and_reduced_motion_contracts(accessi
 def test_javascript_supports_keyboard_filters_and_loading_feedback(accessible_client):
     javascript = accessible_client.get("/portal-static/portal.js").get_data(as_text=True)
 
-    assert 'addEventListener("keydown"' in javascript
-    assert 'event.key === "Enter"' in javascript
-    assert 'event.key === " "' in javascript
-    assert 'setAttribute("aria-pressed"' in javascript
+    assert "[data-filter]" not in javascript
+    assert 'setAttribute("aria-pressed"' not in javascript
     assert 'setAttribute("aria-busy", "true")' in javascript
+
+
+def test_wordmark_and_card_primary_links_have_touch_target_contract(accessible_client):
+    css = accessible_client.get("/portal-static/portal.css").get_data(as_text=True)
+
+    assert ".wordmark," in css
+    assert ".source-card h3 a" in css
+    assert "min-height: 44px" in css

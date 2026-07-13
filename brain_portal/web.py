@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import math
+import re
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Callable, Optional, Protocol
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 
 from flask import Blueprint, abort, g, render_template, request, url_for
 
 from brain_portal.models import CitedAnswer, KnowledgeItem, SearchHit, TenantContext
+from brain_portal.answers import QUERY_LIMIT
 from brain_portal.search import SearchResults
 
 
@@ -26,6 +30,10 @@ class PortalDependencies:
     tenant_resolver: TenantResolver
     search_service: SearchService
     answer_service: AnswerService
+
+
+class PortalDataUnavailable(Exception):
+    pass
 
 
 CLOUDS = (
@@ -81,6 +89,17 @@ def create_portal_blueprint(dependencies: PortalDependencies) -> Blueprint:
             abort(401)
         g.portal_tenant = tenant
 
+    @portal.errorhandler(PortalDataUnavailable)
+    def service_unavailable(error):
+        return (
+            render_template(
+                "portal/service_unavailable.html",
+                page_title="Notes unavailable",
+                tenant=_tenant_view(),
+            ),
+            503,
+        )
+
     @portal.get("/")
     def home():
         items = _tenant_items(dependencies)
@@ -97,17 +116,30 @@ def create_portal_blueprint(dependencies: PortalDependencies) -> Blueprint:
         items = _tenant_items(dependencies)
         query = request.args.get("q", "").strip()
         cloud_key = request.args.get("cloud", "").strip() or None
+        item_type = request.args.get("type", "").strip() or None
+        concept = request.args.get("concept", "").strip() or None
+        freshness = request.args.get("freshness", "").strip() or None
+        place_filter = request.args.get("place", "").strip() or None
         view = {
-            "query": query,
+            "query": query[:QUERY_LIMIT],
             "cloud_key": cloud_key,
             "clouds": CLOUDS,
             "results": [],
             "answer": None,
             "degraded": False,
             "error": False,
+            "query_too_long": len(query) > QUERY_LIMIT,
+            "item_type": item_type,
+            "concept": concept,
+            "freshness": freshness,
+            "place_filter": place_filter,
+            "types": sorted({item.item_type for item in items}),
+            "concepts": sorted({value for item in items for value in item.concepts}),
         }
         status = 200
-        if query:
+        if view["query_too_long"]:
+            status = 400
+        elif query:
             try:
                 raw_results = dependencies.search_service(
                     g.portal_tenant.tenant_id,
@@ -124,6 +156,9 @@ def create_portal_blueprint(dependencies: PortalDependencies) -> Blueprint:
                     for hit in raw_results.hits
                     if hit.item.source_id in allowed_items
                 ]
+                hits = _filter_hits(
+                    hits, cloud_key, item_type, concept, freshness, place_filter
+                )
                 answer = dependencies.answer_service(query, hits) if hits else None
                 view.update(
                     results=[_item_card(hit.item) for hit in hits],
@@ -145,21 +180,43 @@ def create_portal_blueprint(dependencies: PortalDependencies) -> Blueprint:
 
     @portal.get("/cloud/<key>")
     def cloud(key: str):
-        cloud_view = next((cloud for cloud in CLOUDS if cloud["key"] == key), None)
-        if cloud_view is None:
+        cloud_definition = next((cloud for cloud in CLOUDS if cloud["key"] == key), None)
+        if cloud_definition is None:
             abort(404)
-        items = [item for item in _tenant_items(dependencies) if item.cloud_key == key]
+        all_items = _tenant_items(dependencies)
+        items = [item for item in all_items if item.cloud_key == key]
+        cloud_view = dict(cloud_definition)
+        cloud_view["filters"] = [
+            {
+                "label": label,
+                "url": url_for("portal.search", q=label, cloud=key),
+            }
+            for label in cloud_definition["filters"]
+        ]
+        concepts = sorted({concept for item in items for concept in item.concepts})
+        available_clouds = {item.cloud_key for item in all_items if item.cloud_key != key}
+        adjacent = [
+            {
+                "name": cloud["name"],
+                "url": url_for("portal.cloud", key=cloud["key"]),
+            }
+            for cloud in CLOUDS
+            if cloud["key"] in available_clouds
+        ]
         return render_template(
             "portal/cloud.html",
             page_title=cloud_view["name"],
             tenant=_tenant_view(),
             cloud=cloud_view,
             items=[_item_card(item) for item in items],
+            concepts=concepts,
+            adjacent_clouds=adjacent,
         )
 
     @portal.get("/item/<path:source_id>")
     def item_detail(source_id: str):
-        item = _find_item(_tenant_items(dependencies), source_id)
+        items = _tenant_items(dependencies)
+        item = _find_item(items, source_id)
         if item is None:
             abort(404)
         return render_template(
@@ -167,6 +224,13 @@ def create_portal_blueprint(dependencies: PortalDependencies) -> Blueprint:
             page_title=item.title,
             tenant=_tenant_view(),
             item=_item_detail(item),
+            breadcrumbs=_breadcrumbs(item),
+            related=[
+                _item_card(candidate)
+                for candidate in items
+                if candidate.source_id != item.source_id
+                and candidate.cloud_key == item.cloud_key
+            ][:3],
         )
 
     @portal.get("/place/<path:source_id>")
@@ -201,9 +265,13 @@ def create_portal_blueprint(dependencies: PortalDependencies) -> Blueprint:
 
 def _tenant_items(dependencies: PortalDependencies) -> list[KnowledgeItem]:
     tenant_id = g.portal_tenant.tenant_id
+    try:
+        raw_items = dependencies.repository.list_items(tenant_id)
+    except Exception:
+        raise PortalDataUnavailable() from None
     return [
         item
-        for item in dependencies.repository.list_items(tenant_id)
+        for item in raw_items
         if item.tenant_id == tenant_id
     ]
 
@@ -243,8 +311,78 @@ def _item_detail(item: KnowledgeItem) -> dict[str, object]:
         concepts=item.concepts,
         place=item.place,
         canonical_action=_canonical_action(item),
+        reading_time=max(1, math.ceil(len(re.findall(r"\w+", item.body)) / 200)),
+        confidence="Source-backed",
+        takeaways=_takeaways(item),
+        maps_action=_maps_action(item.place),
     )
     return detail
+
+
+def _breadcrumbs(item: KnowledgeItem) -> list[dict[str, str | None]]:
+    cloud = next((cloud for cloud in CLOUDS if cloud["key"] == item.cloud_key), None)
+    values = [{"label": "Home", "url": url_for("portal.home")}]
+    if cloud is not None:
+        values.append(
+            {"label": cloud["name"], "url": url_for("portal.cloud", key=item.cloud_key)}
+        )
+    values.append({"label": item.title, "url": None})
+    return values
+
+
+def _takeaways(item: KnowledgeItem) -> list[str]:
+    values = [item.summary.strip()]
+    values.extend(part.strip() for part in item.body.split("\n\n") if part.strip())
+    return list(dict.fromkeys(value[:280] for value in values if value))[:3]
+
+
+def _maps_action(place: dict[str, object] | None) -> dict[str, str] | None:
+    if not place:
+        return None
+    parts = []
+    for key in ("name", "address", "area"):
+        value = place.get(key)
+        if isinstance(value, str) and value.strip():
+            parts.append(value.strip()[:120])
+    if not parts:
+        return None
+    return {
+        "url": "https://maps.google.com/?" + urlencode({"q": " ".join(parts)}),
+        "label": "Search in Google Maps",
+    }
+
+
+def _filter_hits(
+    hits: list[SearchHit],
+    cloud_key: str | None,
+    item_type: str | None,
+    concept: str | None,
+    freshness: str | None,
+    place_filter: str | None,
+) -> list[SearchHit]:
+    cutoff = None
+    if freshness in {"7d", "30d"}:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=int(freshness[:-1]))
+    filtered = []
+    for hit in hits:
+        item = hit.item
+        if cloud_key and item.cloud_key != cloud_key:
+            continue
+        if item_type and item.item_type != item_type:
+            continue
+        if concept and concept not in item.concepts:
+            continue
+        if place_filter == "with_place" and item.place is None:
+            continue
+        if cutoff is not None:
+            try:
+                updated_at = datetime.fromisoformat(item.updated_at.replace("Z", "+00:00"))
+            except ValueError:
+                continue
+            if updated_at < cutoff:
+                continue
+        filtered.append(hit)
+    return filtered
 
 
 def _canonical_action(item: KnowledgeItem) -> dict[str, str] | None:

@@ -8,7 +8,7 @@
     <form class="search-bar" action="{{ url_for('portal.search') }}" method="get" data-search-form data-loading-copy="Searching your brain">
       <label for="home-query">What do you want to find?</label>
       <div class="search-input-row">
-        <input id="home-query" name="q" type="search" placeholder="Try: How do I make agents more reliable?" required>
+        <input id="home-query" name="q" type="search" maxlength="500" placeholder="Try: How do I make agents more reliable?" required>
         <button type="submit">Search notes</button>
       </div>
       <span class="form-status" aria-live="polite" data-search-status></span>
