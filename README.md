@@ -188,3 +188,54 @@ SQLite `captures.status` 會出現:
 - `failed`:處理失敗,可在 `/api/captures` 看錯誤
 
 白話:出問題時不用猜,先看 dashboard 或 API。
+
+## Brain Cloud Portal(獨立唯讀服務)
+
+`brain_portal/` + `portal_app.py` 是另一個獨立的 Flask 服務,不會動到上面的 LINE Notion Capture (`app.py`)。Obsidian 與 Notion 仍是正本,Portal 只讀不寫。
+
+本機啟動:
+
+```bash
+. .venv/bin/activate
+PORTAL_TENANT_ID=kevin PORTAL_DATABASE_PATH=data/brain-portal.sqlite3 \
+  flask --app portal_app run --port 5050
+```
+
+本機索引(擇一來源):
+
+```bash
+# 從 Obsidian vault 索引
+python scripts/index_brain_portal.py --tenant kevin \
+  --obsidian-root ~/Desktop/Kevin_Brain --database data/brain-portal.sqlite3
+
+# 先乾跑,只看會索引幾筆,不寫入資料庫
+python scripts/index_brain_portal.py --tenant kevin \
+  --obsidian-root ~/Desktop/Kevin_Brain --dry-run
+
+# 從 Notion guided database 索引
+python scripts/index_brain_portal.py --tenant kevin \
+  --notion-connection <Notion database id> --database data/brain-portal.sqlite3
+```
+
+索引需要 `GEMINI_API_KEY` 才能產生 embedding;沒有設定會直接失敗並回傳非 0 exit code,不會半途寫入不完整的向量。
+
+驗證資料完整性:
+
+```bash
+python scripts/verify_brain_portal.py --tenant kevin --database data/brain-portal.sqlite3
+```
+
+輸出是 JSON,包含 `tenant_leaks`、`missing_canonical_refs`、`unsafe_canonical_refs`、`embedding_spaces`、`stale_syncs`、`uncited_cached_answers` 與整體 `valid`。任何一項不乾淨,`valid` 就是 `false` 且 exit code 非 0,適合放進排程或 CI 檢查。
+
+Stale 復原:
+
+1. 跑 `verify_brain_portal.py`,若 `stale_syncs` 非空,代表最近一次來源掃描失敗,Portal 仍安全地保留上一次成功的投影,不會顯示半套資料。
+2. 修好來源問題(例如 Obsidian vault 路徑、Notion token 權限)後,重新執行 `index_brain_portal.py`。
+3. 再跑一次 `verify_brain_portal.py`,`stale_syncs` 應該清空、`valid` 回到 `true`。
+
+Rollback:
+
+- Portal 資料庫是唯讀投影,可直接刪除 `PORTAL_DATABASE_PATH` 指到的 SQLite 檔案後重新索引,不影響 Obsidian 或 Notion 正本。
+- Render 上的 `brain-cloud-portal` service 與 `line-notion-capture` 是分開部署,回滾其中一個不會影響另一個。
+
+白話:Portal 出問題最壞情況就是刪掉投影資料庫重建,原始資料永遠在 Obsidian/Notion,不會遺失。

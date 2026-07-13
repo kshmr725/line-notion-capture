@@ -174,3 +174,34 @@ python scripts/verify_go_live.py https://你的-render-url
 - Notion token/database OK
 - 手機加入 LINE OA 後傳一則文字
 - Notion database 出現新資料
+
+## Brain Cloud Portal 上線與復原(獨立服務,不影響上面 LINE 流程)
+
+Brain Cloud Portal 是 `render.yaml` 裡另一個 service (`brain-cloud-portal`),部署與回滾都跟 `line-notion-capture` 分開。這一節只在你要把 Portal 也上線時才需要。
+
+### 部署前
+
+1. 在 Render 建立 `brain-cloud-portal` service(`render.yaml` 已含宣告),`startCommand` 是 `gunicorn portal_app:app`。
+2. 依 `.env.example` 填 `PORTAL_TENANT_ID`、`PORTAL_TENANT_NAME`、`PORTAL_OBSIDIAN_ROOT`(如用 Obsidian)、`GEMINI_API_KEY`、`NOTION_TOKEN`、`NOTION_WEBHOOK_SECRET`(如用 Notion guided editing)。
+3. 索引一次資料:`python scripts/index_brain_portal.py --tenant kevin --obsidian-root <vault path> --database data/brain-portal.sqlite3`。
+
+### 驗收
+
+```bash
+python scripts/verify_brain_portal.py --tenant kevin --database data/brain-portal.sqlite3
+```
+
+期待輸出 `"valid": true`,`tenant_leaks`、`missing_canonical_refs`、`unsafe_canonical_refs`、`stale_syncs` 全部是空陣列。
+
+### Stale 復原步驟
+
+1. `stale_syncs` 非空代表最近一次索引失敗;Portal 會繼續顯示上一次成功的資料,不會顯示半套或崩潰。
+2. 修好來源(Obsidian vault 路徑、Notion token/database 權限)後,重新跑 `index_brain_portal.py`。
+3. 重新跑 `verify_brain_portal.py` 確認 `stale_syncs` 清空、`valid` 回到 `true`。
+
+### Rollback
+
+- Portal 資料庫(`PORTAL_DATABASE_PATH`)只是唯讀投影,直接刪除該 SQLite 檔案並重新索引即可回到乾淨狀態,不會動到 Obsidian 或 Notion 正本。
+- 在 Render 上把 `brain-cloud-portal` service 回滾到前一個 deploy,不影響 `line-notion-capture` service。
+
+白話:Portal 永遠可以從 Obsidian/Notion 正本重建,資料庫只是快取,不是正本。

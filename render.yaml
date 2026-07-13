@@ -21,3 +21,26 @@ services:
         value: data/line-notion-capture.sqlite3
       - key: DRY_RUN
         value: false
+
+  - type: web
+    name: brain-cloud-portal
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn portal_app:app --bind 0.0.0.0:$PORT
+    envVars:
+      - key: PORTAL_DATABASE_PATH
+        value: data/brain-portal.sqlite3
+      - key: PORTAL_TENANT_ID
+        sync: false
+      - key: PORTAL_TENANT_NAME
+        sync: false
+      - key: PORTAL_OBSIDIAN_ROOT
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: NOTION_TOKEN
+        sync: false
+      - key: NOTION_WEBHOOK_SECRET
+        sync: false
