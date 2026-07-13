@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import logging
+import math
+from dataclasses import dataclass
+from typing import Iterator, Union
 
 from brain_portal.db import PortalRepository
 from brain_portal.indexer import EmbeddingProvider
@@ -11,6 +14,21 @@ LOGGER = logging.getLogger(__name__)
 RRF_K = 60
 
 
+@dataclass(frozen=True)
+class SearchResults:
+    hits: tuple[SearchHit, ...]
+    degraded: bool = False
+
+    def __iter__(self) -> Iterator[SearchHit]:
+        return iter(self.hits)
+
+    def __len__(self) -> int:
+        return len(self.hits)
+
+    def __getitem__(self, index: Union[int, slice]):
+        return self.hits[index]
+
+
 def hybrid_search(
     repo: PortalRepository,
     embedder: EmbeddingProvider,
@@ -18,9 +36,9 @@ def hybrid_search(
     query: str,
     cloud_key: str | None,
     limit: int = 10,
-) -> list[SearchHit]:
+) -> SearchResults:
     if not tenant_id.strip() or not query.strip() or limit <= 0:
-        return []
+        return SearchResults(hits=())
     lexical = repo.lexical_search(
         tenant_id,
         query,
@@ -28,21 +46,29 @@ def hybrid_search(
         cloud_key=cloud_key,
     )
     semantic = []
+    degraded = False
     try:
+        model_id = embedder.model_id.strip()
+        dimensions = embedder.dimensions
+        if not model_id or not isinstance(dimensions, int) or dimensions <= 0:
+            raise ValueError("embedding provider space is invalid")
         query_vector = [
             float(value) for value in embedder.embed(query, "RETRIEVAL_QUERY")
         ]
+        if len(query_vector) != dimensions or not all(
+            math.isfinite(value) for value in query_vector
+        ):
+            raise ValueError("query embedding does not match provider space")
         semantic = repo.vector_search(
             tenant_id,
             query_vector,
-            model_id=str(
-                getattr(embedder, "model_id", type(embedder).__name__)
-            ),
-            dimensions=len(query_vector),
+            model_id=model_id,
+            dimensions=dimensions,
             limit=limit,
             cloud_key=cloud_key,
         )
     except Exception as error:
+        degraded = True
         LOGGER.warning(
             "semantic retrieval degraded for tenant=%s error=%s",
             tenant_id,
@@ -66,10 +92,15 @@ def hybrid_search(
                 ),
             )
         )
-    return sorted(
-        results,
-        key=lambda hit: (-hit.score, hit.item.source_id),
-    )[:limit]
+    return SearchResults(
+        hits=tuple(
+            sorted(
+                results,
+                key=lambda hit: (-hit.score, hit.item.source_id),
+            )[:limit]
+        ),
+        degraded=degraded,
+    )
 
 
 def _add_ranking(

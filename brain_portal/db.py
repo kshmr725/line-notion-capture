@@ -394,9 +394,17 @@ class PortalRepository:
             ).fetchall()
             scores = {}
             for row in rows:
-                embedding = [
-                    float(value) for value in json.loads(row["embedding_json"])
-                ]
+                try:
+                    raw_embedding = json.loads(row["embedding_json"])
+                    if not isinstance(raw_embedding, list):
+                        continue
+                    embedding = [float(value) for value in raw_embedding]
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    continue
+                if len(embedding) != dimensions or not all(
+                    math.isfinite(value) for value in embedding
+                ):
+                    continue
                 score = cosine_similarity(query_embedding, embedding)
                 scores[row["source_id"]] = max(
                     scores.get(row["source_id"], -1.0), score

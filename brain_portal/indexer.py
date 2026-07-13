@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -13,6 +14,9 @@ from brain_portal.models import KnowledgeItem, SourceDocument
 
 
 class EmbeddingProvider(Protocol):
+    model_id: str
+    dimensions: int
+
     def embed(self, text: str, task_type: str) -> list[float]: ...
 
 
@@ -56,6 +60,7 @@ def run_index(
 ) -> IndexReport:
     if not tenant_id.strip():
         raise ValueError("trusted tenant_id is required")
+    model_id, dimensions = _embedding_space(embedder)
     source_type = connector.source_type.strip()
     if not source_type:
         raise ValueError("connector source_type is required")
@@ -101,6 +106,12 @@ def run_index(
                 [float(value) for value in embedder.embed(chunk, "RETRIEVAL_DOCUMENT")]
                 for chunk in chunks
             ]
+            if any(
+                len(embedding) != dimensions
+                or not all(math.isfinite(value) for value in embedding)
+                for embedding in embeddings
+            ):
+                raise ValueError("embedding vector does not match provider space")
             prepared.append((item, chunks, embeddings))
         except Exception as error:
             failed += 1
@@ -123,7 +134,7 @@ def run_index(
                     tenant_id,
                     item.source_id,
                     embeddings,
-                    str(getattr(embedder, "model_id", type(embedder).__name__)),
+                    model_id,
                 )
             deleted = _soft_delete_missing(
                 connection, tenant_id, source_type, seen_source_ids
@@ -301,6 +312,14 @@ def _join_diagnostics(diagnostics: list[str]) -> str | None:
 
 def _bounded_diagnostic(label: str, detail: str) -> str:
     return f"{label}: {detail}"[:500]
+
+
+def _embedding_space(embedder: EmbeddingProvider) -> tuple[str, int]:
+    model_id = embedder.model_id.strip()
+    dimensions = embedder.dimensions
+    if not model_id or not isinstance(dimensions, int) or dimensions <= 0:
+        raise ValueError("embedding provider model_id and dimensions are required")
+    return model_id, dimensions
 
 
 def _now() -> str:

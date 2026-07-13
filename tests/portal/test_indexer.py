@@ -1,15 +1,24 @@
 import json
 from dataclasses import replace
+from typing import get_type_hints
 
 import pytest
 
 from brain_portal.db import PortalRepository, init_portal_db, portal_connect
 from brain_portal.connectors.base import SourceConnector
-from brain_portal.indexer import IndexReport, normalize_document, run_index
+from brain_portal.indexer import (
+    EmbeddingProvider,
+    IndexReport,
+    normalize_document,
+    run_index,
+)
 from brain_portal.models import SourceDocument
 
 
 class FakeEmbedder:
+    model_id = "fake-embedding"
+    dimensions = 2
+
     def __init__(self):
         self.calls = []
 
@@ -103,7 +112,7 @@ def test_index_persists_embeddings_and_successful_sync_run(portal_repo):
     try:
         chunk = connection.execute(
             """
-            SELECT embedding_json, embedding_dimensions
+            SELECT embedding_json, embedding_model, embedding_dimensions
             FROM knowledge_chunks
             WHERE tenant_id = ?
             """,
@@ -128,6 +137,7 @@ def test_index_persists_embeddings_and_successful_sync_run(portal_repo):
         1.0,
     ]
     assert chunk["embedding_dimensions"] == 2
+    assert chunk["embedding_model"] == "fake-embedding"
     assert embedder.calls[0][1] == "RETRIEVAL_DOCUMENT"
     assert dict(sync) == {"status": "success", "indexed_count": 1}
 
@@ -145,6 +155,29 @@ def test_successful_empty_scan_soft_deletes_missing_source_ids(portal_repo):
 
 def test_source_connector_protocol_requires_source_type():
     assert SourceConnector.__annotations__["source_type"] is str
+
+
+def test_embedding_provider_protocol_requires_model_identity_and_dimensions():
+    annotations = get_type_hints(EmbeddingProvider)
+    assert annotations["model_id"] is str
+    assert annotations["dimensions"] is int
+
+
+@pytest.mark.parametrize(
+    ("model_id", "dimensions"),
+    [("", 2), ("fake-embedding", 0)],
+)
+def test_index_rejects_invalid_embedding_space(
+    portal_repo, model_id, dimensions
+):
+    embedder = FakeEmbedder()
+    embedder.model_id = model_id
+    embedder.dimensions = dimensions
+
+    with pytest.raises(ValueError, match="embedding provider"):
+        run_index("kevin", FakeConnector([document()]), portal_repo, embedder)
+
+    assert portal_repo.list_items("kevin") == []
 
 
 def test_failed_scan_keeps_the_last_successful_projection(portal_repo):
