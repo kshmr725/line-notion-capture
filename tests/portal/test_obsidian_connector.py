@@ -19,6 +19,21 @@ def test_connector_maps_folder_to_cloud_without_writing(tmp_path):
     assert note.stat().st_mtime_ns == before
 
 
+def test_food_note_filename_becomes_an_honest_place_projection(tmp_path):
+    root = tmp_path / "Kevin_Brain"
+    note = root / "71_Food_美食與咖啡地圖" / "2026-06-12 [咖啡廳] Cozzi Café 敦南店.md"
+    note.parent.mkdir(parents=True)
+    note.write_text("# Cozzi\n\nA saved place.", encoding="utf-8")
+
+    [document] = list(ObsidianConnector(root).iter_documents("kevin"))
+
+    assert document.metadata["item_type"] == "place"
+    assert document.metadata["place"] == {
+        "name": "Cozzi Café 敦南店",
+        "category": "咖啡廳",
+    }
+
+
 def test_connector_filters_every_path_outside_the_mvp_policy(tmp_path):
     root = tmp_path / "Kevin_Brain"
     valid = root / "11_Web3_商業研究" / "Visible.md"

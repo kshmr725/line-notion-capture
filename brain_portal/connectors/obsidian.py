@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Union
@@ -60,5 +61,20 @@ class ObsidianConnector:
                 updated_at=datetime.fromtimestamp(
                     stat.st_mtime, tz=timezone.utc
                 ).isoformat(),
-                metadata={},
+                metadata=_source_metadata(relative.parts[0], candidate.stem),
             )
+
+
+def _source_metadata(folder: str, title: str) -> dict[str, object]:
+    if FOLDER_CLOUDS.get(folder) != "food":
+        return {}
+    place_name = re.sub(r"^\d{4}-\d{2}-\d{2}\s*", "", title).strip()
+    category_match = re.search(r"\[([^\]]+)\]", place_name)
+    category = category_match.group(1).strip() if category_match else ""
+    if category_match:
+        place_name = (place_name[: category_match.start()] + place_name[category_match.end() :]).strip()
+    place_name = re.sub(r"^[^\w\u4e00-\u9fff]+", "", place_name).strip()
+    place: dict[str, object] = {"name": place_name or title}
+    if category:
+        place["category"] = category
+    return {"item_type": "place", "place": place}

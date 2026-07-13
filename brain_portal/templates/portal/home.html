@@ -1,71 +1,36 @@
 {% extends "portal/base.html" %}
 {% block content %}
-<div class="page-shell home-flow discovery-thread">
-  <section id="brain-search" class="search-hero" aria-labelledby="home-title">
-    <p class="eyebrow">A searchable second brain</p>
-    <h1 id="home-title">Find a useful note, then follow its sources.</h1>
-    <p class="hero-copy">Ask in everyday language. Browse by Cloud only when context helps.</p>
-    <form class="search-bar" action="{{ url_for('portal.search') }}" method="get" data-search-form data-loading-copy="Searching your brain">
-      <label for="home-query">What do you want to find?</label>
-      <div class="search-input-row">
-        <input id="home-query" name="q" type="search" maxlength="500" placeholder="Try: How do I make agents more reliable?" required>
-        <button type="submit">Search notes</button>
-      </div>
-      <span class="form-status" aria-live="polite" data-search-status></span>
-    </form>
+<div class="workspace-page home-page">
+  <section class="workspace-heading" aria-labelledby="home-title">
+    <p class="eyebrow">你的 Second Brain</p>
+    <div><h1 id="home-title">從你想找的事開始。</h1><p>搜尋所有知識，或直接進入一個 Cloud。</p></div>
   </section>
-
-  <section id="intent-shortcuts" class="flow-section" aria-labelledby="intent-title">
-    <div class="section-heading">
-      <p class="section-kicker">Start with an intent</p>
-      <h2 id="intent-title">What are you trying to do?</h2>
-    </div>
-    <div class="intent-row">
-      <a class="intent-pill" href="{{ url_for('portal.search', q='research a topic') }}">Research a topic</a>
-      <a class="intent-pill" href="{{ url_for('portal.search', q='find a place') }}">Find a place</a>
-      <a class="intent-pill" href="{{ url_for('portal.search', q='reuse a method') }}">Reuse a method</a>
-      <a class="intent-pill" href="{{ url_for('portal.search', q='explore related ideas') }}">Explore links</a>
-    </div>
-  </section>
-
-  <section id="cloud-gallery" class="flow-section" aria-labelledby="cloud-title">
-    <div class="section-heading split-heading">
-      <div>
-        <p class="section-kicker">Curated contexts</p>
-        <h2 id="cloud-title">Browse a Cloud</h2>
-      </div>
-      <p>Use a Cloud when you know the kind of decision you are making.</p>
-    </div>
-    <div class="cloud-grid">
+  <section id="cloud-gallery" class="workspace-section" aria-labelledby="cloud-title">
+    <div class="section-head"><h2 id="cloud-title">我的 Cloud</h2><span>依內容類型快速進入</span></div>
+    <div class="cloud-tile-grid">
       {% for cloud in clouds %}
-      <a class="cloud-card" href="{{ url_for('portal.cloud', key=cloud.key) }}">
-        <span class="cloud-index">0{{ loop.index }}</span>
-        <span class="cloud-name">{{ cloud.name }}</span>
-        <span class="cloud-description">{{ cloud.description }}</span>
-        <span class="card-action">Explore Cloud <span aria-hidden="true">↗</span></span>
+      <a class="cloud-tile cloud-{{ cloud.key }}" data-cloud-key="{{ cloud.key }}" href="{{ cloud.url }}">
+        <span class="tile-title"><b aria-hidden="true">{{ cloud.icon }}</b><strong>{{ cloud.name }}</strong></span>
+        <span class="tile-copy">{{ cloud.description }}</span>
+        <span class="tile-meta"><span>{{ cloud.count_label }}</span><span>{{ cloud.freshness }}</span></span>
       </a>
       {% endfor %}
     </div>
   </section>
-
-  <section id="recent-notes" class="flow-section" aria-labelledby="recent-title">
-    <div class="section-heading">
-      <p class="section-kicker">Continue reading</p>
-      <h2 id="recent-title">Recent notes</h2>
-    </div>
+  <section id="recent-notes" class="workspace-section" aria-labelledby="recent-title">
+    <div class="section-head"><h2 id="recent-title">繼續使用</h2><span>跨 Cloud 最近內容</span></div>
     {% if recent %}
-    <div class="card-grid compact-grid">
+    <div class="continue-list">
       {% for item in recent %}
-      <article class="source-card" data-source-id="{{ item.source_id }}">
-        <div class="source-card-meta"><span class="cloud-label">{{ item.cloud_key }}</span><span>{{ item.item_type }}</span></div>
-        <h3><a href="{{ item.url }}">{{ item.title }}</a></h3>
-        <p>{{ item.summary }}</p>
-        <div class="source-card-actions"><a href="{{ item.url }}">Read note</a>{% if item.place_url %}<a href="{{ item.place_url }}">View place</a>{% endif %}</div>
-      </article>
+      <a class="continue-row" data-source-id="{{ item.source_id }}" href="{{ item.url }}">
+        <span class="row-icon" aria-hidden="true">{% if item.cloud_key == 'food' %}⌖{% elif item.cloud_key == 'web3' %}◌{% else %}✦{% endif %}</span>
+        <span class="row-content"><strong>{{ item.title }}</strong><small>{{ item.summary }}</small></span>
+        <span class="cloud-badge cloud-{{ item.cloud_key }}">{{ item.cloud_key }}</span>
+      </a>
       {% endfor %}
     </div>
     {% else %}
-    <div class="state-card"><p>No notes are indexed yet. Check source status to begin.</p></div>
+    <div class="state-card"><h2>還沒有可瀏覽的筆記</h2><p>完成索引後，這裡會顯示最近使用的真實內容。</p><a href="{{ url_for('portal.sync') }}">查看資料來源狀態</a></div>
     {% endif %}
   </section>
 </div>

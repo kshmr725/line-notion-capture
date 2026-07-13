@@ -1,33 +1,40 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-Hant">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f3f6f5">
+  <meta name="theme-color" content="#f5f7f5">
   <title>{{ page_title }} · Brain Cloud</title>
   <link rel="stylesheet" href="{{ url_for('portal.static', filename='portal.css') }}">
   <script defer src="{{ url_for('portal.static', filename='portal.js') }}"></script>
 </head>
 <body>
-  <a class="skip-link" href="#main-content">Skip to content</a>
-  <header class="site-header">
-    <nav class="nav-shell" aria-label="Primary">
-      <a class="wordmark" href="{{ url_for('portal.home') }}" aria-label="Brain Cloud home">
-        <span class="wordmark-mark" aria-hidden="true">B</span>
-        <span>Brain Cloud</span>
-      </a>
-      <div class="nav-links">
-        <a href="{{ url_for('portal.search') }}">Search</a>
-        <a href="{{ url_for('portal.sync') }}">Sources</a>
-      </div>
-      <span class="tenant-chip">{{ tenant.display_name }}</span>
-    </nav>
-  </header>
-  <main id="main-content" tabindex="-1">
-    {% block content %}{% endblock %}
-  </main>
-  <footer class="site-footer">
-    <p>Your sources stay canonical. This portal helps you find and follow them.</p>
-  </footer>
+  <a class="skip-link" href="#main-content">跳到主要內容</a>
+  <div class="workspace-shell">
+    <aside id="cloud-rail" class="cloud-rail" aria-label="Second Brain 導覽">
+      <a class="workspace-brand" href="{{ url_for('portal.home') }}" aria-label="Brain Cloud 首頁"><span aria-hidden="true">☁</span><span>Brain Cloud</span></a>
+      <nav class="cloud-rail-nav" aria-label="Cloud 導覽">
+        <a href="{{ url_for('portal.home') }}" {% if request.endpoint == 'portal.home' %}aria-current="page"{% endif %}><span aria-hidden="true">▦</span>首頁</a>
+        {% for nav_cloud in nav_clouds %}
+        <a href="{{ url_for('portal.cloud', key=nav_cloud.key) }}" {% if active_cloud_key == nav_cloud.key %}aria-current="page"{% endif %}><span aria-hidden="true">{{ nav_cloud.icon }}</span>{{ nav_cloud.short_name }}</a>
+        {% endfor %}
+      </nav>
+      <a class="rail-utility" href="{{ url_for('portal.sync') }}"><span aria-hidden="true">↻</span>資料來源</a>
+    </aside>
+    <div class="workspace-main">
+      <header class="workspace-topbar">
+        <form id="global-search" class="global-search" action="{{ url_for('portal.search') }}" method="get" data-search-form data-loading-copy="正在搜尋你的知識庫">
+          <label for="global-query">搜尋所有知識</label>
+          <div><input id="global-query" name="q" type="search" maxlength="500" placeholder="搜尋主題、地點、專案或概念…"><button type="submit">搜尋</button></div>
+          <span class="form-status" aria-live="polite" data-search-status></span>
+        </form>
+        <span class="tenant-chip">{{ tenant.display_name }}</span>
+      </header>
+      <main id="main-content" tabindex="-1">
+        {% block content %}{% endblock %}
+      </main>
+      <footer class="workspace-footer"><p>這裡只負責找到與串聯知識；內容仍由原始 Obsidian 或 Notion 管理。</p></footer>
+    </div>
+  </div>
 </body>
 </html>

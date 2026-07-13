@@ -132,16 +132,47 @@ def portal_setup():
     return app.test_client(), repository, resolver, search, answers
 
 
-def test_home_leads_with_search_then_intents_then_clouds_then_recent(portal_setup):
+def test_home_leads_with_global_search_then_clouds_then_recent(portal_setup):
     client, *_ = portal_setup
 
     html = client.get("/").get_data(as_text=True)
 
-    assert html.index('id="brain-search"') < html.index('id="intent-shortcuts"')
-    assert html.index('id="intent-shortcuts"') < html.index('id="cloud-gallery"')
+    assert html.index('id="global-search"') < html.index('id="cloud-gallery"')
     assert html.index('id="cloud-gallery"') < html.index('id="recent-notes"')
     assert "Knowledge Items" not in html
-    assert "Find a useful note, then follow its sources." in html
+    assert "從你想找的事開始。" in html
+
+
+def test_home_is_a_compact_cloud_workbench_with_real_counts(portal_setup):
+    client, *_ = portal_setup
+
+    html = client.get("/").get_data(as_text=True)
+
+    assert 'class="workspace-shell"' in html
+    assert 'id="cloud-rail"' in html
+    assert 'id="global-search"' in html
+    assert html.index('id="global-search"') < html.index('id="cloud-gallery"')
+    assert "我的 Cloud" in html
+    assert 'data-cloud-key="ai"' in html
+    assert "3 筆" in html
+    assert "尚未索引" in html
+    assert 'class="continue-list"' in html
+    assert "Find a useful note, then follow its sources." not in html
+
+
+def test_cloud_views_use_domain_specific_data_backed_workspaces(portal_setup):
+    client, *_ = portal_setup
+
+    web3_html = client.get("/cloud/web3").get_data(as_text=True)
+    food_html = client.get("/cloud/food").get_data(as_text=True)
+    ai_html = client.get("/cloud/ai").get_data(as_text=True)
+
+    assert 'id="sector-map"' in web3_html
+    assert 'href="/search?q=Sector&amp;cloud=web3"' in web3_html
+    assert 'id="food-discovery"' in food_html
+    assert "地圖資料不足，改以清單瀏覽" in food_html
+    assert 'id="ai-workspace"' in ai_html
+    assert "Workflow" in ai_html
 
 
 def test_all_routes_resolve_the_mandatory_tenant(portal_setup):
@@ -262,7 +293,7 @@ def test_item_is_answer_first_and_has_obsidian_action(portal_setup):
     html = client.get("/item/ai-agent").get_data(as_text=True)
 
     assert html.index('id="item-answer"') < html.index('id="item-metadata"')
-    assert "Open in Obsidian" in html
+    assert "在 Obsidian 開啟" in html
     assert 'href="obsidian://open?vault=Brain&amp;file=ai-agent"' in html
 
 
@@ -271,7 +302,7 @@ def test_notion_item_has_direct_edit_action(portal_setup):
 
     html = client.get("/item/notion-page").get_data(as_text=True)
 
-    assert "Edit in Notion" in html
+    assert "在 Notion 編輯" in html
     assert 'href="https://www.notion.so/notion-page"' in html
 
 
@@ -454,18 +485,18 @@ def test_item_and_place_hide_untrusted_canonical_actions(source_type, canonical_
 
     assert canonical_ref not in item_html
     assert canonical_ref not in place_html
-    assert "Open in Obsidian" not in item_html
-    assert "Edit in Notion" not in item_html
+    assert "在 Obsidian 開啟" not in item_html
+    assert "在 Notion 編輯" not in item_html
     assert "Open source note" not in place_html
 
 
 @pytest.mark.parametrize(
     ("source_type", "canonical_ref", "action"),
     [
-        ("obsidian", "obsidian://open?vault=Brain&file=note", "Open in Obsidian"),
-        ("notion", "https://notion.so/page", "Edit in Notion"),
-        ("notion", "https://www.notion.so/page", "Edit in Notion"),
-        ("notion", "https://team.notion.so/page", "Edit in Notion"),
+        ("obsidian", "obsidian://open?vault=Brain&file=note", "在 Obsidian 開啟"),
+        ("notion", "https://notion.so/page", "在 Notion 編輯"),
+        ("notion", "https://www.notion.so/page", "在 Notion 編輯"),
+        ("notion", "https://team.notion.so/page", "在 Notion 編輯"),
     ],
 )
 def test_item_and_place_allow_only_trusted_canonical_actions(
@@ -607,8 +638,8 @@ def test_item_view_derives_reader_context_and_same_cloud_relations():
     html = app.test_client().get("/item/ai-agent").get_data(as_text=True)
 
     assert 'aria-label="Breadcrumb"' in html
-    assert "1 min read" in html
-    assert "Source-backed" in html
+    assert "1 分鐘閱讀" in html
+    assert "原始來源支援" in html
     assert 'id="key-takeaways"' in html
     assert "First practical point." in html
     assert 'id="related-notes"' in html
@@ -625,7 +656,7 @@ def test_cloud_derives_related_concepts_and_adjacent_clouds(portal_setup):
     assert 'id="related-concepts"' in html
     assert "agents" in html
     assert "reliability" in html
-    assert 'id="adjacent-clouds"' in html
+    assert 'id="cloud-rail"' in html
     assert 'href="/cloud/food"' in html
 
 

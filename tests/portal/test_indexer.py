@@ -98,6 +98,15 @@ def test_reindexing_same_revision_is_idempotent(
     assert len(fake_embedder.calls) == 1
 
 
+def test_run_index_without_embedder_persists_a_lexical_projection(portal_repo):
+    report = run_index("kevin", FakeConnector([document()]), portal_repo, None)
+
+    assert report == IndexReport(indexed=1, unchanged=0, deleted=0, failed=0)
+    assert [hit.item.title for hit in portal_repo.lexical_search("kevin", "Agent")] == [
+        "Agent"
+    ]
+
+
 def test_normalization_uses_first_body_paragraph_and_metadata():
     doc = document(body="# Heading\n\nFirst useful paragraph\n\nSecond paragraph")
 

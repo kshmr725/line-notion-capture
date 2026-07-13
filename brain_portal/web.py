@@ -57,37 +57,31 @@ class PortalDataUnavailable(Exception):
 
 CLOUDS = (
     {
-        "key": "ai",
-        "name": "AI Automation",
-        "description": "Methods, tools, and reliable agent workflows.",
-        "filters": ("Tool", "Agent", "Workflow", "Reliability"),
-        "paths": (
-            "Build reliable agents",
-            "Connect tools with MCP",
-            "Reuse an automation method",
-        ),
-    },
-    {
         "key": "web3",
-        "name": "Web3 Research",
-        "description": "Projects, markets, and investment theses in context.",
+        "name": "Web3 商業研究",
+        "short_name": "Web3",
+        "icon": "◌",
+        "description": "賽道、專案與概念 Wiki。",
         "filters": ("Sector", "Project", "Thesis", "Status"),
-        "paths": (
-            "Review an active thesis",
-            "Compare adjacent projects",
-            "Trace a market signal",
-        ),
+        "paths": ("Review an active thesis", "Compare adjacent projects"),
     },
     {
         "key": "food",
-        "name": "Food and Places",
-        "description": "Restaurants and field notes organized for real decisions.",
+        "name": "美食與咖啡地圖",
+        "short_name": "美食地圖",
+        "icon": "⌖",
+        "description": "地點、想去清單與使用情境。",
         "filters": ("Area", "Category", "Visit status", "Use case"),
-        "paths": (
-            "Find a quiet dinner",
-            "Return to a favorite place",
-            "Plan by neighborhood",
-        ),
+        "paths": ("Find a quiet dinner", "Plan by neighborhood"),
+    },
+    {
+        "key": "ai",
+        "name": "AI 自動化",
+        "short_name": "AI 自動化",
+        "icon": "✦",
+        "description": "工具、Agent 與可重用的工作流。",
+        "filters": ("Tool", "Agent", "MCP", "Workflow", "Reliability"),
+        "paths": ("Build reliable agents", "Connect tools with MCP"),
     },
 )
 
@@ -108,6 +102,13 @@ def create_portal_blueprint(dependencies: PortalDependencies) -> Blueprint:
             abort(401)
         g.portal_tenant = tenant
 
+    @portal.context_processor
+    def workspace_context():
+        active_cloud = None
+        if request.endpoint == "portal.cloud":
+            active_cloud = request.view_args.get("key") if request.view_args else None
+        return {"nav_clouds": CLOUDS, "active_cloud_key": active_cloud}
+
     @portal.errorhandler(PortalDataUnavailable)
     def service_unavailable(error):
         return (
@@ -124,9 +125,9 @@ def create_portal_blueprint(dependencies: PortalDependencies) -> Blueprint:
         items = _tenant_items(dependencies)
         return render_template(
             "portal/home.html",
-            page_title="Home",
+            page_title="首頁",
             tenant=_tenant_view(),
-            clouds=CLOUDS,
+            clouds=_cloud_cards(items),
             recent=[_item_card(item) for item in items[:6]],
         )
 
@@ -190,7 +191,7 @@ def create_portal_blueprint(dependencies: PortalDependencies) -> Blueprint:
         return (
             render_template(
                 "portal/search.html",
-                page_title="Search",
+            page_title="搜尋",
                 tenant=_tenant_view(),
                 view=view,
             ),
@@ -230,6 +231,7 @@ def create_portal_blueprint(dependencies: PortalDependencies) -> Blueprint:
             items=[_item_card(item) for item in items],
             concepts=concepts,
             adjacent_clouds=adjacent,
+            workspace=_cloud_workspace(items, key),
         )
 
     @portal.get("/item/<path:source_id>")
@@ -274,7 +276,7 @@ def create_portal_blueprint(dependencies: PortalDependencies) -> Blueprint:
         last_updated = max((item.updated_at for item in items), default=None)
         return render_template(
             "portal/sync.html",
-            page_title="Source status",
+            page_title="資料來源",
             tenant=_tenant_view(),
             sync={
                 "state": "Up to date",
@@ -318,6 +320,8 @@ def _item_card(item: KnowledgeItem) -> dict[str, object]:
         "cloud_key": item.cloud_key,
         "item_type": item.item_type,
         "updated_at": item.updated_at,
+        "concepts": item.concepts,
+        "place": item.place,
         "url": url_for("portal.item_detail", source_id=item.source_id),
         "place_url": (
             url_for("portal.place_detail", source_id=item.source_id)
@@ -426,13 +430,21 @@ def _canonical_action(item: KnowledgeItem) -> dict[str, str] | None:
         return None
     parsed = urlparse(canonical_ref)
     if item.source_type == "obsidian" and parsed.scheme.lower() == "obsidian":
-        return {"url": canonical_ref, "label": "Open in Obsidian"}
+        return {
+            "url": canonical_ref,
+            "label": "在 Obsidian 開啟",
+            "legacy_label": "Open in Obsidian",
+        }
     if item.source_type != "notion" or parsed.scheme.lower() != "https":
         return None
     hostname = (parsed.hostname or "").lower().rstrip(".")
     if hostname != "notion.so" and not hostname.endswith(".notion.so"):
         return None
-    return {"url": canonical_ref, "label": "Edit in Notion"}
+    return {
+        "url": canonical_ref,
+        "label": "在 Notion 編輯",
+        "legacy_label": "Edit in Notion",
+    }
 
 
 def _answer_view(
@@ -453,3 +465,66 @@ def _answer_view(
     if not citations:
         return None
     return {"text": answer.text, "citations": citations, "provider": answer.provider}
+
+
+def _cloud_cards(items: list[KnowledgeItem]) -> list[dict[str, object]]:
+    cards = []
+    for cloud in CLOUDS:
+        cloud_items = [item for item in items if item.cloud_key == cloud["key"]]
+        card = dict(cloud)
+        card.update(
+            count=len(cloud_items),
+            count_label=f"{len(cloud_items)} 筆" if cloud_items else "尚未索引",
+            freshness=_freshness_label(cloud_items),
+            url=url_for("portal.cloud", key=cloud["key"]),
+        )
+        cards.append(card)
+    return cards
+
+
+def _freshness_label(items: list[KnowledgeItem]) -> str:
+    if not items:
+        return "尚未索引"
+    latest = max(item.updated_at for item in items)
+    return f"更新於 {latest[:10]}"
+
+
+def _cloud_workspace(items: list[KnowledgeItem], key: str) -> dict[str, object]:
+    definition = next(cloud for cloud in CLOUDS if cloud["key"] == key)
+    tabs = [
+        {
+            "label": label,
+            "url": url_for("portal.search", q=label, cloud=key),
+        }
+        for label in definition["filters"]
+    ]
+    concepts = sorted({concept for item in items for concept in item.concepts})
+    concept_counts = [
+        {
+            "label": concept,
+            "count": sum(concept in item.concepts for item in items),
+            "url": url_for("portal.search", q=concept, cloud=key, concept=concept),
+        }
+        for concept in concepts
+    ]
+    places = [item for item in items if item.place is not None]
+    has_coordinates = any(_place_has_coordinates(item.place) for item in places)
+    return {
+        "tabs": tabs,
+        "recent": [_item_card(item) for item in items[:6]],
+        "concepts": concept_counts,
+        "places": [_item_card(item) for item in places],
+        "has_coordinates": has_coordinates,
+        "item_count": len(items),
+    }
+
+
+def _place_has_coordinates(place: dict[str, object] | None) -> bool:
+    if place is None:
+        return False
+    try:
+        latitude = float(place.get("latitude", ""))
+        longitude = float(place.get("longitude", ""))
+    except (TypeError, ValueError):
+        return False
+    return math.isfinite(latitude) and math.isfinite(longitude)

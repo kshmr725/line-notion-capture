@@ -33,6 +33,7 @@ def main(argv: list[str] | None = None, settings: PortalSettings | None = None) 
     source.add_argument("--obsidian-root")
     source.add_argument("--notion-connection")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--lexical-only", action="store_true")
     parser.add_argument("--database", default=None)
     args = parser.parse_args(argv)
 
@@ -56,19 +57,24 @@ def main(argv: list[str] | None = None, settings: PortalSettings | None = None) 
         return 0
 
     gemini_key = settings.gemini_api_key.strip()
-    if not gemini_key:
+    if not args.lexical_only and not gemini_key:
         print("GEMINI_API_KEY is required to index (embeddings)", file=sys.stderr)
         return 1
 
     init_portal_db(database_path)
     repo = PortalRepository(database_path)
-    embedder = GeminiEmbeddingProvider(gemini_key, timeout=settings.ai_timeout_seconds)
+    embedder = (
+        None
+        if args.lexical_only
+        else GeminiEmbeddingProvider(gemini_key, timeout=settings.ai_timeout_seconds)
+    )
 
     report = run_index(args.tenant, connector, repo, embedder)
     print(
         json.dumps(
             {
                 "tenant": args.tenant,
+                "mode": "lexical-only" if args.lexical_only else "semantic",
                 "indexed": report.indexed,
                 "unchanged": report.unchanged,
                 "deleted": report.deleted,

@@ -61,11 +61,11 @@ def run_index(
     tenant_id: str,
     connector: SourceConnector,
     repo: PortalRepository,
-    embedder: EmbeddingProvider,
+    embedder: EmbeddingProvider | None,
 ) -> IndexReport:
     if not tenant_id.strip():
         raise ValueError("trusted tenant_id is required")
-    model_id, dimensions = _embedding_space(embedder)
+    model_id, dimensions = _embedding_space(embedder) if embedder is not None else (None, None)
     source_type = connector.source_type.strip()
     if not source_type:
         raise ValueError("connector source_type is required")
@@ -107,16 +107,18 @@ def run_index(
         try:
             item = normalize_document(doc)
             chunks = _chunk_item(item)
-            embeddings = [
-                [float(value) for value in embedder.embed(chunk, "RETRIEVAL_DOCUMENT")]
-                for chunk in chunks
-            ]
-            if any(
-                len(embedding) != dimensions
-                or not all(math.isfinite(value) for value in embedding)
-                for embedding in embeddings
-            ):
-                raise ValueError("embedding vector does not match provider space")
+            embeddings = None
+            if embedder is not None:
+                embeddings = [
+                    [float(value) for value in embedder.embed(chunk, "RETRIEVAL_DOCUMENT")]
+                    for chunk in chunks
+                ]
+                if any(
+                    len(embedding) != dimensions
+                    or not all(math.isfinite(value) for value in embedding)
+                    for embedding in embeddings
+                ):
+                    raise ValueError("embedding vector does not match provider space")
             prepared.append((item, chunks, embeddings))
         except Exception as error:
             failed += 1
@@ -134,13 +136,14 @@ def run_index(
                     chunks,
                     connection=connection,
                 )
-                _persist_embeddings(
-                    connection,
-                    tenant_id,
-                    item.source_id,
-                    embeddings,
-                    model_id,
-                )
+                if embeddings is not None and model_id is not None:
+                    _persist_embeddings(
+                        connection,
+                        tenant_id,
+                        item.source_id,
+                        embeddings,
+                        model_id,
+                    )
             deleted = _soft_delete_missing(
                 connection, tenant_id, source_type, seen_source_ids
             )

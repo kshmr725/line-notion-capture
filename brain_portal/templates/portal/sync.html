@@ -1,23 +1,4 @@
 {% extends "portal/base.html" %}
 {% block content %}
-<div class="page-shell sync-page">
-  <header class="page-intro">
-    <p class="eyebrow">Canonical sources</p>
-    <h1>Know what is ready to search.</h1>
-    <p>The portal reads your source notes and never becomes a second editing system.</p>
-  </header>
-  <section id="sync-status" class="sync-card" aria-labelledby="sync-title">
-    <span class="status-dot" aria-hidden="true"></span>
-    <div>
-      <p class="section-kicker">Current state</p>
-      <h2 id="sync-title">{{ sync.state }}</h2>
-      {% if sync.last_updated %}<p>Latest indexed change: {{ sync.last_updated }}</p>{% endif %}
-      <p>{{ sync.source_count }} source note{% if sync.source_count != 1 %}s{% endif %} available.</p>
-    </div>
-  </section>
-  <section class="state-card" aria-labelledby="source-help-title">
-    <h2 id="source-help-title">Edit at the source</h2>
-    <p>Open an individual note to continue in Obsidian or Notion. Changes appear after the next index run.</p>
-  </section>
-</div>
+<div class="workspace-page sync-page"><header class="page-intro"><p class="eyebrow">原始資料</p><h1>確認哪些知識已可搜尋。</h1><p>Portal 只讀取原始筆記，不會成為另一套編輯系統。</p></header><section id="sync-status" class="sync-card" aria-labelledby="sync-title"><span class="status-dot" aria-hidden="true"></span><div><p class="eyebrow">目前狀態</p><h2 id="sync-title">{{ sync.state }}</h2>{% if sync.last_updated %}<p>最新索引變更：{{ sync.last_updated }}</p>{% endif %}<p>目前有 {{ sync.source_count }} 則可用來源筆記。</p></div></section><section class="state-card" aria-labelledby="source-help-title"><h2 id="source-help-title">回原始來源修改</h2><p>開啟個別筆記後可回到 Obsidian 或 Notion 編輯；下次索引後會反映在這裡。</p></section></div>
 {% endblock %}

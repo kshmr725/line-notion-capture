@@ -94,7 +94,7 @@ def test_every_page_has_semantic_shell_skip_link_and_one_h1(accessible_client, p
     parser.feed(html)
 
     assert html.startswith("<!doctype html>")
-    assert '<html lang="en">' in html
+    assert '<html lang="zh-Hant">' in html
     assert "header" in parser.tags
     assert "nav" in parser.tags
     assert "main" in parser.tags
@@ -115,18 +115,18 @@ def test_search_controls_have_programmatic_labels_and_live_states(accessible_cli
     assert "search-query" in parser.labels
     assert "search-cloud" in parser.labels
     assert 'aria-live="polite"' in html
-    assert 'data-loading-copy="Searching your brain"' in html
+    assert 'data-loading-copy="正在搜尋你的知識庫"' in html
 
 
 def test_css_encodes_focus_touch_responsive_and_reduced_motion_contracts(accessible_client):
     css = accessible_client.get("/portal-static/portal.css").get_data(as_text=True)
 
     assert ":focus-visible" in css
-    assert "min-height: 44px" in css
-    assert "border-radius: 14px" in css
-    assert "@media (min-width: 760px)" in css
-    assert "@media (min-width: 1080px)" in css
-    assert "prefers-reduced-motion: reduce" in css
+    assert "min-height:44px" in css
+    assert "--radius:14px" in css
+    assert "@media (min-width:760px)" in css
+    assert "@media (min-width:1080px)" in css
+    assert "prefers-reduced-motion:reduce" in css
     assert "#2f7168" in css
     assert "gradient" not in css.lower()
 
@@ -144,4 +144,4 @@ def test_wordmark_and_card_primary_links_have_touch_target_contract(accessible_c
 
     assert ".wordmark," in css
     assert ".source-card h3 a" in css
-    assert "min-height: 44px" in css
+    assert "min-height:44px" in css

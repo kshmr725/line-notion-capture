@@ -1,24 +1,4 @@
 {% extends "portal/base.html" %}
 {% block content %}
-<article class="page-shell place-page">
-  <header class="page-intro">
-    <p class="eyebrow">Saved place</p>
-    <h1>{{ item.place.name or item.title }}</h1>
-    <p>{{ item.summary }}</p>
-  </header>
-  <section class="place-sheet" aria-labelledby="place-detail-title">
-    <h2 id="place-detail-title">Visit context</h2>
-    <dl>
-      {% for label, value in item.place.items() %}
-      <div><dt>{{ label|replace('_', ' ')|title }}</dt><dd>{{ value }}</dd></div>
-      {% endfor %}
-    </dl>
-    {% if item.canonical_action %}
-    <a class="primary-action" href="{{ item.canonical_action.url }}">Open source note</a>
-    {% endif %}
-    {% if item.maps_action %}
-    <a class="primary-action secondary-action" href="{{ item.maps_action.url }}">{{ item.maps_action.label }}</a>
-    {% endif %}
-  </section>
-</article>
+<article class="workspace-page place-page"><header class="page-intro"><p class="eyebrow">收藏地點</p><h1>{{ item.place.name or item.title }}</h1><p>{{ item.summary }}</p></header><section class="place-sheet" aria-labelledby="place-detail-title"><h2 id="place-detail-title">地點資訊</h2><dl>{% for label, value in item.place.items() %}<div><dt>{{ label|replace('_', ' ')|title }}</dt><dd>{{ value }}</dd></div>{% endfor %}</dl>{% if item.canonical_action %}<a class="primary-action" data-canonical-action="Open source note" href="{{ item.canonical_action.url }}">查看原始筆記</a>{% endif %}{% if item.maps_action %}<a class="primary-action secondary-action" href="{{ item.maps_action.url }}">{{ item.maps_action.label }}</a>{% endif %}</section></article>
 {% endblock %}
