@@ -1,0 +1,72 @@
+{% extends "portal/base.html" %}
+{% block content %}
+<div class="page-shell home-flow discovery-thread">
+  <section id="brain-search" class="search-hero" aria-labelledby="home-title">
+    <p class="eyebrow">A searchable second brain</p>
+    <h1 id="home-title">Find a useful note, then follow its sources.</h1>
+    <p class="hero-copy">Ask in everyday language. Browse by Cloud only when context helps.</p>
+    <form class="search-bar" action="{{ url_for('portal.search') }}" method="get" data-search-form data-loading-copy="Searching your brain">
+      <label for="home-query">What do you want to find?</label>
+      <div class="search-input-row">
+        <input id="home-query" name="q" type="search" placeholder="Try: How do I make agents more reliable?" required>
+        <button type="submit">Search notes</button>
+      </div>
+      <span class="form-status" aria-live="polite" data-search-status></span>
+    </form>
+  </section>
+
+  <section id="intent-shortcuts" class="flow-section" aria-labelledby="intent-title">
+    <div class="section-heading">
+      <p class="section-kicker">Start with an intent</p>
+      <h2 id="intent-title">What are you trying to do?</h2>
+    </div>
+    <div class="intent-row">
+      <a class="intent-pill" href="{{ url_for('portal.search', q='research a topic') }}">Research a topic</a>
+      <a class="intent-pill" href="{{ url_for('portal.search', q='find a place') }}">Find a place</a>
+      <a class="intent-pill" href="{{ url_for('portal.search', q='reuse a method') }}">Reuse a method</a>
+      <a class="intent-pill" href="{{ url_for('portal.search', q='explore related ideas') }}">Explore links</a>
+    </div>
+  </section>
+
+  <section id="cloud-gallery" class="flow-section" aria-labelledby="cloud-title">
+    <div class="section-heading split-heading">
+      <div>
+        <p class="section-kicker">Curated contexts</p>
+        <h2 id="cloud-title">Browse a Cloud</h2>
+      </div>
+      <p>Use a Cloud when you know the kind of decision you are making.</p>
+    </div>
+    <div class="cloud-grid">
+      {% for cloud in clouds %}
+      <a class="cloud-card" href="{{ url_for('portal.cloud', key=cloud.key) }}">
+        <span class="cloud-index">0{{ loop.index }}</span>
+        <span class="cloud-name">{{ cloud.name }}</span>
+        <span class="cloud-description">{{ cloud.description }}</span>
+        <span class="card-action">Explore Cloud <span aria-hidden="true">↗</span></span>
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section id="recent-notes" class="flow-section" aria-labelledby="recent-title">
+    <div class="section-heading">
+      <p class="section-kicker">Continue reading</p>
+      <h2 id="recent-title">Recent notes</h2>
+    </div>
+    {% if recent %}
+    <div class="card-grid compact-grid">
+      {% for item in recent %}
+      <article class="source-card" data-source-id="{{ item.source_id }}">
+        <div class="source-card-meta"><span class="cloud-label">{{ item.cloud_key }}</span><span>{{ item.item_type }}</span></div>
+        <h3><a href="{{ item.url }}">{{ item.title }}</a></h3>
+        <p>{{ item.summary }}</p>
+        <div class="source-card-actions"><a href="{{ item.url }}">Read note</a>{% if item.place_url %}<a href="{{ item.place_url }}">View place</a>{% endif %}</div>
+      </article>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="state-card"><p>No notes are indexed yet. Check source status to begin.</p></div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,36 @@
+{% extends "portal/base.html" %}
+{% block content %}
+<article class="page-shell item-page">
+  <header class="item-header">
+    <p class="eyebrow">{{ item.cloud_key }} · {{ item.item_type }}</p>
+    <h1>{{ item.title }}</h1>
+    <p class="freshness">Updated {{ item.updated_at }}</p>
+  </header>
+
+  <section id="item-answer" class="answer-panel" aria-labelledby="item-answer-title">
+    <p class="section-kicker">Answer first</p>
+    <h2 id="item-answer-title">The useful part</h2>
+    <p class="answer-text">{{ item.summary }}</p>
+  </section>
+
+  <section class="reading-section" aria-labelledby="evidence-title">
+    <h2 id="evidence-title">Source-backed note</h2>
+    <p>{{ item.body }}</p>
+  </section>
+
+  <aside id="item-metadata" class="item-metadata" aria-labelledby="metadata-title">
+    <h2 id="metadata-title">Context</h2>
+    <dl>
+      <div><dt>Cloud</dt><dd>{{ item.cloud_key }}</dd></div>
+      <div><dt>Type</dt><dd>{{ item.item_type }}</dd></div>
+      <div><dt>Updated</dt><dd>{{ item.updated_at }}</dd></div>
+    </dl>
+    {% if item.concepts %}
+    <div class="concept-row" aria-label="Related concepts">
+      {% for concept in item.concepts %}<span>{{ concept }}</span>{% endfor %}
+    </div>
+    {% endif %}
+    <a class="primary-action" href="{{ item.canonical_ref }}">{{ item.source_action }}</a>
+  </aside>
+</article>
+{% endblock %}

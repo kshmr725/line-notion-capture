@@ -1,0 +1,85 @@
+{% extends "portal/base.html" %}
+{% block content %}
+<div class="page-shell search-page">
+  <header class="page-intro">
+    <p class="eyebrow">Search your sources</p>
+    <h1>Turn a question into a trail of notes.</h1>
+  </header>
+
+  <form class="search-bar search-controls" action="{{ url_for('portal.search') }}" method="get" data-search-form data-loading-copy="Searching your brain">
+    <div class="control-field query-field">
+      <label for="search-query">Search query</label>
+      <input id="search-query" name="q" type="search" value="{{ view.query }}" placeholder="Ask a question or name a topic">
+    </div>
+    <div class="control-field cloud-field">
+      <label for="search-cloud">Cloud</label>
+      <select id="search-cloud" name="cloud">
+        <option value="">All Clouds</option>
+        {% for cloud in view.clouds %}
+        <option value="{{ cloud.key }}" {% if view.cloud_key == cloud.key %}selected{% endif %}>{{ cloud.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit">Search notes</button>
+    <span class="form-status" aria-live="polite" data-search-status></span>
+  </form>
+
+  {% if view.error %}
+  <section id="search-error-state" class="state-card error-state" aria-live="polite">
+    <h2>Search needs another moment</h2>
+    <p>Search is temporarily unavailable. Try again in a moment.</p>
+  </section>
+  {% elif not view.query %}
+  <section id="search-empty-state" class="state-card" aria-live="polite">
+    <h2>Start with a question</h2>
+    <p>Describe what you want to find. Your closest source notes will stay visible with every answer.</p>
+  </section>
+  {% else %}
+    {% if view.degraded %}
+    <p id="retrieval-status" class="status-strip" role="status">Keyword results are available while semantic search recovers.</p>
+    {% endif %}
+
+    {% if view.answer %}
+    <section class="answer-panel" aria-labelledby="answer-title">
+      <p class="section-kicker">Supported answer</p>
+      <h2 id="answer-title">What your notes suggest</h2>
+      <p class="answer-text">{{ view.answer.text }}</p>
+      <div id="answer-citations" class="citation-list" aria-label="Answer sources">
+        {% for citation in view.answer.citations %}
+        <a class="citation-pill" href="{{ citation.url }}">{{ loop.index }} · {{ citation.title }}</a>
+        {% endfor %}
+      </div>
+    </section>
+    {% elif view.results %}
+    <section id="source-only-state" class="state-card" aria-live="polite">
+      <h2>Closest sources</h2>
+      <p>No supported answer is available. Review the closest sources below.</p>
+    </section>
+    {% else %}
+    <section class="state-card" aria-live="polite">
+      <h2>No close match yet</h2>
+      <p>Try a broader phrase or remove the Cloud filter.</p>
+    </section>
+    {% endif %}
+
+    {% if view.results %}
+    <section class="result-section" aria-labelledby="results-title">
+      <div class="section-heading split-heading">
+        <h2 id="results-title">Source notes</h2>
+        <p>{{ view.results|length }} close match{% if view.results|length != 1 %}es{% endif %}</p>
+      </div>
+      <div class="card-grid">
+        {% for item in view.results %}
+        <article class="source-card" data-source-id="{{ item.source_id }}">
+          <div class="source-card-meta"><span class="cloud-label">{{ item.cloud_key }}</span><span>{{ item.item_type }}</span></div>
+          <h3><a href="{{ item.url }}">{{ item.title }}</a></h3>
+          <p>{{ item.summary }}</p>
+          <div class="source-card-actions"><a href="{{ item.url }}">Read note</a>{% if item.place_url %}<a href="{{ item.place_url }}">View place</a>{% endif %}</div>
+        </article>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+  {% endif %}
+</div>
+{% endblock %}

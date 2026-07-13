@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f3f6f5">
+  <title>{{ page_title }} · Brain Cloud</title>
+  <link rel="stylesheet" href="{{ url_for('portal.static', filename='portal.css') }}">
+  <script defer src="{{ url_for('portal.static', filename='portal.js') }}"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <header class="site-header">
+    <nav class="nav-shell" aria-label="Primary">
+      <a class="wordmark" href="{{ url_for('portal.home') }}" aria-label="Brain Cloud home">
+        <span class="wordmark-mark" aria-hidden="true">B</span>
+        <span>Brain Cloud</span>
+      </a>
+      <div class="nav-links">
+        <a href="{{ url_for('portal.search') }}">Search</a>
+        <a href="{{ url_for('portal.sync') }}">Sources</a>
+      </div>
+      <span class="tenant-chip">{{ tenant.display_name }}</span>
+    </nav>
+  </header>
+  <main id="main-content" tabindex="-1">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="site-footer">
+    <p>Your sources stay canonical. This portal helps you find and follow them.</p>
+  </footer>
+</body>
+</html>

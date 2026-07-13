@@ -1,0 +1,19 @@
+{% extends "portal/base.html" %}
+{% block content %}
+<article class="page-shell place-page">
+  <header class="page-intro">
+    <p class="eyebrow">Saved place</p>
+    <h1>{{ item.place.name or item.title }}</h1>
+    <p>{{ item.summary }}</p>
+  </header>
+  <section class="place-sheet" aria-labelledby="place-detail-title">
+    <h2 id="place-detail-title">Visit context</h2>
+    <dl>
+      {% for label, value in item.place.items() %}
+      <div><dt>{{ label|replace('_', ' ')|title }}</dt><dd>{{ value }}</dd></div>
+      {% endfor %}
+    </dl>
+    <a class="primary-action" href="{{ item.canonical_ref }}">Open source note</a>
+  </section>
+</article>
+{% endblock %}

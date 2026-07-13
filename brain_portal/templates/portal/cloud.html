@@ -1,0 +1,61 @@
+{% extends "portal/base.html" %}
+{% block content %}
+<div class="page-shell cloud-page">
+  <header class="page-intro cloud-intro">
+    <p class="eyebrow">Cloud directory</p>
+    <h1>{{ cloud.name }}</h1>
+    <p>{{ cloud.description }}</p>
+    <form class="search-bar cloud-search" action="{{ url_for('portal.search') }}" method="get" data-search-form data-loading-copy="Searching this Cloud">
+      <label for="cloud-query">Search within {{ cloud.name }}</label>
+      <input id="cloud-query" name="q" type="search" placeholder="Ask within this context">
+      <input name="cloud" type="hidden" value="{{ cloud.key }}">
+      <button type="submit">Search Cloud</button>
+      <span class="form-status" aria-live="polite" data-search-status></span>
+    </form>
+  </header>
+
+  <section id="cloud-filters" class="flow-section" aria-labelledby="filter-title">
+    <div class="section-heading">
+      <p class="section-kicker">Narrow the context</p>
+      <h2 id="filter-title">Useful filters</h2>
+    </div>
+    <div class="filter-row" role="group" aria-label="Cloud filters">
+      {% for filter in cloud.filters %}
+      <button class="filter-pill" type="button" aria-pressed="false" data-filter>{{ filter }}</button>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section id="featured-paths" class="flow-section" aria-labelledby="path-title">
+    <div class="section-heading">
+      <p class="section-kicker">Featured paths</p>
+      <h2 id="path-title">Follow a useful thread</h2>
+    </div>
+    <div class="path-list">
+      {% for path in cloud.paths %}
+      <a href="{{ url_for('portal.search', q=path, cloud=cloud.key) }}">
+        <span>0{{ loop.index }}</span><strong>{{ path }}</strong><span aria-hidden="true">↗</span>
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="flow-section" aria-labelledby="cloud-notes-title">
+    <div class="section-heading"><h2 id="cloud-notes-title">Notes in this Cloud</h2></div>
+    {% if items %}
+    <div class="card-grid">
+      {% for item in items %}
+      <article class="source-card" data-source-id="{{ item.source_id }}">
+        <div class="source-card-meta"><span class="cloud-label">{{ item.cloud_key }}</span><span>{{ item.item_type }}</span></div>
+        <h3><a href="{{ item.url }}">{{ item.title }}</a></h3>
+        <p>{{ item.summary }}</p>
+        <div class="source-card-actions"><a href="{{ item.url }}">Read note</a>{% if item.place_url %}<a href="{{ item.place_url }}">View place</a>{% endif %}</div>
+      </article>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="state-card"><p>No notes match this Cloud yet.</p></div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

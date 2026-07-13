@@ -1,0 +1,23 @@
+{% extends "portal/base.html" %}
+{% block content %}
+<div class="page-shell sync-page">
+  <header class="page-intro">
+    <p class="eyebrow">Canonical sources</p>
+    <h1>Know what is ready to search.</h1>
+    <p>The portal reads your source notes and never becomes a second editing system.</p>
+  </header>
+  <section id="sync-status" class="sync-card" aria-labelledby="sync-title">
+    <span class="status-dot" aria-hidden="true"></span>
+    <div>
+      <p class="section-kicker">Current state</p>
+      <h2 id="sync-title">{{ sync.state }}</h2>
+      {% if sync.last_updated %}<p>Latest indexed change: {{ sync.last_updated }}</p>{% endif %}
+      <p>{{ sync.source_count }} source note{% if sync.source_count != 1 %}s{% endif %} available.</p>
+    </div>
+  </section>
+  <section class="state-card" aria-labelledby="source-help-title">
+    <h2 id="source-help-title">Edit at the source</h2>
+    <p>Open an individual note to continue in Obsidian or Notion. Changes appear after the next index run.</p>
+  </section>
+</div>
+{% endblock %}
