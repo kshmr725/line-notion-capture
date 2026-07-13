@@ -4,4 +4,6 @@ from brain_portal.models import SourceDocument
 
 
 class SourceConnector(Protocol):
+    source_type: str
+
     def iter_documents(self, tenant_id: str) -> Iterable[SourceDocument]: ...

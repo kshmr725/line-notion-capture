@@ -6,6 +6,7 @@ import math
 import os
 import re
 import sqlite3
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Sequence, Union
 
@@ -161,16 +162,29 @@ class PortalRepository:
         self.path = path
 
     def upsert_item(
-        self, tenant_id: str, item: KnowledgeItem, chunks: Sequence[str]
+        self,
+        tenant_id: str,
+        item: KnowledgeItem,
+        chunks: Sequence[str],
+        *,
+        connection: sqlite3.Connection | None = None,
     ) -> None:
         if not tenant_id.strip():
             raise ValueError("trusted tenant_id is required")
         if item.tenant_id != tenant_id:
             raise ValueError("item tenant_id does not match trusted tenant_id")
-        connection = portal_connect(self.path)
+        owns_connection = connection is None
+        active_connection = (
+            connection if connection is not None else portal_connect(self.path)
+        )
         try:
-            with connection:
-                connection.execute(
+            transaction = (
+                active_connection
+                if owns_connection
+                else nullcontext(active_connection)
+            )
+            with transaction:
+                active_connection.execute(
                     """
                     INSERT INTO tenants (tenant_id, display_name)
                     VALUES (?, ?)
@@ -178,7 +192,7 @@ class PortalRepository:
                     """,
                     (item.tenant_id, item.tenant_id),
                 )
-                connection.execute(
+                active_connection.execute(
                     """
                     INSERT INTO knowledge_items (
                         tenant_id, source_id, source_type, canonical_ref, title,
@@ -211,11 +225,11 @@ class PortalRepository:
                         item.updated_at,
                     ),
                 )
-                connection.execute(
+                active_connection.execute(
                     "DELETE FROM item_concepts WHERE tenant_id = ? AND source_id = ?",
                     (item.tenant_id, item.source_id),
                 )
-                connection.executemany(
+                active_connection.executemany(
                     """
                     INSERT INTO item_concepts (tenant_id, source_id, concept)
                     VALUES (?, ?, ?)
@@ -225,12 +239,12 @@ class PortalRepository:
                         for concept in item.concepts
                     ),
                 )
-                connection.execute(
+                active_connection.execute(
                     "DELETE FROM places WHERE tenant_id = ? AND source_id = ?",
                     (item.tenant_id, item.source_id),
                 )
                 if item.place is not None:
-                    connection.execute(
+                    active_connection.execute(
                         """
                         INSERT INTO places (tenant_id, source_id, place_json)
                         VALUES (?, ?, ?)
@@ -241,14 +255,14 @@ class PortalRepository:
                             json.dumps(item.place, sort_keys=True),
                         ),
                     )
-                connection.execute(
+                active_connection.execute(
                     "DELETE FROM knowledge_chunks WHERE tenant_id = ? AND source_id = ?",
                     (item.tenant_id, item.source_id),
                 )
-                next_chunk_row_id = connection.execute(
+                next_chunk_row_id = active_connection.execute(
                     "SELECT COALESCE(MAX(chunk_row_id), 0) + 1 FROM knowledge_chunks"
                 ).fetchone()[0]
-                connection.executemany(
+                active_connection.executemany(
                     """
                     INSERT INTO knowledge_chunks (
                         tenant_id, tenant_key, source_id, chunk_index,
@@ -268,7 +282,8 @@ class PortalRepository:
                     ),
                 )
         finally:
-            connection.close()
+            if owns_connection:
+                active_connection.close()
 
     def lexical_search(
         self, tenant_id: str, query: str, limit: int = 10

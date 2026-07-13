@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Protocol
@@ -55,27 +56,38 @@ def run_index(
 ) -> IndexReport:
     if not tenant_id.strip():
         raise ValueError("trusted tenant_id is required")
-    configured_source_type = str(getattr(connector, "source_type", "unknown"))
-    run_id = _begin_sync(repo, tenant_id, configured_source_type)
+    source_type = connector.source_type.strip()
+    if not source_type:
+        raise ValueError("connector source_type is required")
+    run_id = _begin_sync(repo, tenant_id, source_type)
     try:
         documents = list(connector.iter_documents(tenant_id))
     except Exception as error:
         report = IndexReport(indexed=0, unchanged=0, deleted=0, failed=1)
-        _finish_sync(repo, tenant_id, run_id, "stale", report, str(error))
+        _finish_sync(
+            repo,
+            tenant_id,
+            run_id,
+            "stale",
+            report,
+            _bounded_diagnostic(type(error).__name__, str(error)),
+        )
         return report
 
-    source_types = {doc.source_type for doc in documents}
-    source_type = configured_source_type
-    if source_type == "unknown" and len(source_types) == 1:
-        source_type = next(iter(source_types))
     existing = {item.source_id: item for item in repo.list_items(tenant_id)}
-    indexed = 0
     unchanged = 0
     failed = 0
+    diagnostics = []
+    prepared = []
     seen_source_ids = {doc.source_id for doc in documents}
     for doc in documents:
         if doc.tenant_id != tenant_id:
             failed += 1
+            diagnostics.append(f"{doc.source_id}: tenant mismatch")
+            continue
+        if doc.source_type != source_type:
+            failed += 1
+            diagnostics.append(f"{doc.source_id}: source_type mismatch")
             continue
         if doc.source_id in existing and (
             existing[doc.source_id].source_revision == doc.source_revision
@@ -89,28 +101,66 @@ def run_index(
                 [float(value) for value in embedder.embed(chunk, "RETRIEVAL_DOCUMENT")]
                 for chunk in chunks
             ]
-            repo.upsert_item(tenant_id, item, chunks)
-            _persist_embeddings(
-                repo,
-                tenant_id,
-                item.source_id,
-                embeddings,
-                str(getattr(embedder, "model_id", type(embedder).__name__)),
-            )
-            indexed += 1
-        except Exception:
+            prepared.append((item, chunks, embeddings))
+        except Exception as error:
             failed += 1
+            diagnostics.append(
+                _bounded_diagnostic(doc.source_id, type(error).__name__)
+            )
 
-    deleted = _soft_delete_missing(
-        repo, tenant_id, source_type, seen_source_ids
-    )
+    connection = portal_connect(repo.path)
+    try:
+        with connection:
+            for item, chunks, embeddings in prepared:
+                repo.upsert_item(
+                    tenant_id,
+                    item,
+                    chunks,
+                    connection=connection,
+                )
+                _persist_embeddings(
+                    connection,
+                    tenant_id,
+                    item.source_id,
+                    embeddings,
+                    str(getattr(embedder, "model_id", type(embedder).__name__)),
+                )
+            deleted = _soft_delete_missing(
+                connection, tenant_id, source_type, seen_source_ids
+            )
+    except Exception as error:
+        report = IndexReport(
+            indexed=0,
+            unchanged=unchanged,
+            deleted=0,
+            failed=failed + 1,
+        )
+        _finish_sync(
+            repo,
+            tenant_id,
+            run_id,
+            "stale",
+            report,
+            _bounded_diagnostic(type(error).__name__, str(error)),
+        )
+        return report
+    finally:
+        connection.close()
+
     report = IndexReport(
-        indexed=indexed,
+        indexed=len(prepared),
         unchanged=unchanged,
         deleted=deleted,
         failed=failed,
     )
-    _finish_sync(repo, tenant_id, run_id, "success", report)
+    _finish_sync(
+        repo,
+        tenant_id,
+        run_id,
+        "success",
+        report,
+        _join_diagnostics(diagnostics),
+    )
     return report
 
 
@@ -185,76 +235,72 @@ def _finish_sync(
 
 
 def _persist_embeddings(
-    repo: PortalRepository,
+    connection: sqlite3.Connection,
     tenant_id: str,
     source_id: str,
     embeddings: list[list[float]],
     model_id: str,
 ) -> None:
-    connection = portal_connect(repo.path)
-    try:
-        with connection:
-            rows = connection.execute(
-                """
-                SELECT chunk_index
-                FROM knowledge_chunks
-                WHERE tenant_id = ? AND source_id = ?
-                ORDER BY chunk_index
-                """,
-                (tenant_id, source_id),
-            ).fetchall()
-            if len(rows) != len(embeddings):
-                raise RuntimeError("chunk and embedding counts differ")
-            for row, embedding in zip(rows, embeddings):
-                connection.execute(
-                    """
-                    UPDATE knowledge_chunks
-                    SET embedding_json = ?, embedding_model = ?,
-                        embedding_dimensions = ?
-                    WHERE tenant_id = ? AND source_id = ? AND chunk_index = ?
-                    """,
-                    (
-                        json.dumps(embedding),
-                        model_id,
-                        len(embedding),
-                        tenant_id,
-                        source_id,
-                        row["chunk_index"],
-                    ),
-                )
-    finally:
-        connection.close()
+    rows = connection.execute(
+        """
+        SELECT chunk_index
+        FROM knowledge_chunks
+        WHERE tenant_id = ? AND source_id = ?
+        ORDER BY chunk_index
+        """,
+        (tenant_id, source_id),
+    ).fetchall()
+    if len(rows) != len(embeddings):
+        raise RuntimeError("chunk and embedding counts differ")
+    for row, embedding in zip(rows, embeddings):
+        connection.execute(
+            """
+            UPDATE knowledge_chunks
+            SET embedding_json = ?, embedding_model = ?,
+                embedding_dimensions = ?
+            WHERE tenant_id = ? AND source_id = ? AND chunk_index = ?
+            """,
+            (
+                json.dumps(embedding),
+                model_id,
+                len(embedding),
+                tenant_id,
+                source_id,
+                row["chunk_index"],
+            ),
+        )
 
 
 def _soft_delete_missing(
-    repo: PortalRepository,
+    connection: sqlite3.Connection,
     tenant_id: str,
     source_type: str,
     seen_source_ids: set[str],
 ) -> int:
-    if source_type == "unknown":
-        return 0
     parameters = [tenant_id, source_type]
     exclusion = ""
     if seen_source_ids:
         placeholders = ", ".join("?" for _ in seen_source_ids)
         exclusion = f" AND source_id NOT IN ({placeholders})"
         parameters.extend(sorted(seen_source_ids))
-    connection = portal_connect(repo.path)
-    try:
-        with connection:
-            cursor = connection.execute(
-                """
-                UPDATE knowledge_items
-                SET deleted_at = ?
-                WHERE tenant_id = ? AND source_type = ? AND deleted_at IS NULL
-                """
-                + exclusion,
-                [_now(), *parameters],
-            )
-            return max(cursor.rowcount, 0)
-    finally:
-        connection.close()
+    cursor = connection.execute(
+        """
+        UPDATE knowledge_items
+        SET deleted_at = ?
+        WHERE tenant_id = ? AND source_type = ? AND deleted_at IS NULL
+        """
+        + exclusion,
+        [_now(), *parameters],
+    )
+    return max(cursor.rowcount, 0)
+
+
+def _join_diagnostics(diagnostics: list[str]) -> str | None:
+    return "; ".join(diagnostics)[:500] or None
+
+
+def _bounded_diagnostic(label: str, detail: str) -> str:
+    return f"{label}: {detail}"[:500]
 
 
 def _now() -> str:
