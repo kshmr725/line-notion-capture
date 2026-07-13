@@ -10,6 +10,7 @@ from contextlib import nullcontext
 from pathlib import Path
 from typing import Sequence, Union
 
+from brain_portal.embeddings import cosine_similarity
 from brain_portal.models import KnowledgeItem, SearchHit
 
 
@@ -286,7 +287,11 @@ class PortalRepository:
                 active_connection.close()
 
     def lexical_search(
-        self, tenant_id: str, query: str, limit: int = 10
+        self,
+        tenant_id: str,
+        query: str,
+        limit: int = 10,
+        cloud_key: str | None = None,
     ) -> list[SearchHit]:
         terms = tuple(dict.fromkeys(_tokenize(query)))
         if not tenant_id.strip() or not terms or limit <= 0:
@@ -303,19 +308,29 @@ class PortalRepository:
                   ON chunks.chunk_row_id = fts.rowid
                  AND chunks.tenant_id = ?
                  AND chunks.tenant_key = ?
+                JOIN knowledge_items AS items
+                  ON items.tenant_id = chunks.tenant_id
+                 AND items.source_id = chunks.source_id
+                 AND items.deleted_at IS NULL
+                 AND (? IS NULL OR items.cloud_key = ?)
                 WHERE knowledge_chunks_fts MATCH ?
                 """,
-                (tenant_id, tenant_key, match_query),
+                (tenant_id, tenant_key, cloud_key, cloud_key, match_query),
             ).fetchall()
             if not candidate_rows:
                 return []
             corpus_rows = connection.execute(
                 """
                 SELECT chunk_text
-                FROM knowledge_chunks
-                WHERE tenant_id = ? AND tenant_key = ?
+                FROM knowledge_chunks AS chunks
+                JOIN knowledge_items AS items
+                  ON items.tenant_id = chunks.tenant_id
+                 AND items.source_id = chunks.source_id
+                 AND items.deleted_at IS NULL
+                 AND (? IS NULL OR items.cloud_key = ?)
+                WHERE chunks.tenant_id = ? AND chunks.tenant_key = ?
                 """,
-                (tenant_id, tenant_key),
+                (cloud_key, cloud_key, tenant_id, tenant_key),
             ).fetchall()
             scores = _tenant_bm25_scores(terms, corpus_rows, candidate_rows)
             hits = []
@@ -327,8 +342,9 @@ class PortalRepository:
                     SELECT *
                     FROM knowledge_items
                     WHERE tenant_id = ? AND source_id = ? AND deleted_at IS NULL
+                      AND (? IS NULL OR cloud_key = ?)
                     """,
-                    (tenant_id, source_id),
+                    (tenant_id, source_id, cloud_key, cloud_key),
                 ).fetchone()
                 if row is not None:
                     hits.append(
@@ -336,6 +352,74 @@ class PortalRepository:
                             item=self._item_from_row(connection, row),
                             score=score,
                             matched_by=("lexical",),
+                        )
+                    )
+            return hits
+        finally:
+            connection.close()
+
+    def vector_search(
+        self,
+        tenant_id: str,
+        query_embedding: list[float],
+        model_id: str,
+        dimensions: int,
+        limit: int = 10,
+        cloud_key: str | None = None,
+    ) -> list[SearchHit]:
+        if (
+            not tenant_id.strip()
+            or not query_embedding
+            or dimensions != len(query_embedding)
+            or limit <= 0
+        ):
+            return []
+        connection = portal_connect(self.path)
+        try:
+            rows = connection.execute(
+                """
+                SELECT chunks.source_id, chunks.embedding_json
+                FROM knowledge_chunks AS chunks
+                JOIN knowledge_items AS items
+                  ON items.tenant_id = chunks.tenant_id
+                 AND items.source_id = chunks.source_id
+                 AND items.deleted_at IS NULL
+                 AND (? IS NULL OR items.cloud_key = ?)
+                WHERE chunks.tenant_id = ?
+                  AND chunks.embedding_model = ?
+                  AND chunks.embedding_dimensions = ?
+                  AND chunks.embedding_json IS NOT NULL
+                """,
+                (cloud_key, cloud_key, tenant_id, model_id, dimensions),
+            ).fetchall()
+            scores = {}
+            for row in rows:
+                embedding = [
+                    float(value) for value in json.loads(row["embedding_json"])
+                ]
+                score = cosine_similarity(query_embedding, embedding)
+                scores[row["source_id"]] = max(
+                    scores.get(row["source_id"], -1.0), score
+                )
+            hits = []
+            for source_id, score in sorted(
+                scores.items(), key=lambda result: (-result[1], result[0])
+            )[:limit]:
+                item_row = connection.execute(
+                    """
+                    SELECT *
+                    FROM knowledge_items
+                    WHERE tenant_id = ? AND source_id = ? AND deleted_at IS NULL
+                      AND (? IS NULL OR cloud_key = ?)
+                    """,
+                    (tenant_id, source_id, cloud_key, cloud_key),
+                ).fetchone()
+                if item_row is not None:
+                    hits.append(
+                        SearchHit(
+                            item=self._item_from_row(connection, item_row),
+                            score=score,
+                            matched_by=("semantic",),
                         )
                     )
             return hits
