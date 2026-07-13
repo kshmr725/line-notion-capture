@@ -13,6 +13,7 @@ from brain_portal.indexer import (
     IndexReport,
     index_document,
     normalize_document,
+    record_permission_denied,
     run_index,
 )
 from brain_portal.models import SourceDocument
@@ -397,6 +398,17 @@ def test_index_document_marks_permission_required_on_permission_error(
     assert report == IndexReport(indexed=0, unchanged=0, deleted=0, failed=1)
     sync = portal_repo.latest_sync("kevin", "notion")
     assert sync.status == "permission_required"
+
+
+def test_record_permission_denied_marks_sync_run_without_a_document(portal_repo):
+    report = record_permission_denied(
+        "kevin", "notion", portal_repo, "Notion access was denied"
+    )
+
+    assert report == IndexReport(indexed=0, unchanged=0, deleted=0, failed=1)
+    sync = portal_repo.latest_sync("kevin", "notion")
+    assert sync.status == "permission_required"
+    assert portal_repo.list_items("kevin") == []
 
 
 def test_index_document_rejects_mismatched_trusted_tenant(portal_repo, fake_embedder):

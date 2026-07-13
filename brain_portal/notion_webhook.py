@@ -5,7 +5,7 @@ import hmac
 
 from flask import Blueprint, Response, abort, request
 
-from brain_portal.indexer import index_document
+from brain_portal.indexer import index_document, record_permission_denied
 
 
 SIGNAL_EVENT_TYPES = {"page.content_updated", "page.properties_updated"}
@@ -33,8 +33,14 @@ def create_notion_webhook_blueprint(
         entity = payload.get("entity")
         page_id = entity.get("id") if isinstance(entity, dict) else None
         if event_type in SIGNAL_EVENT_TYPES and isinstance(page_id, str) and page_id.strip():
-            document = connector.fetch_document(tenant_id, page_id)
-            index_document(tenant_id, document, repo, embedder)
+            try:
+                document = connector.fetch_document(tenant_id, page_id)
+            except PermissionError as error:
+                record_permission_denied(
+                    tenant_id, connector.source_type, repo, str(error)
+                )
+            else:
+                index_document(tenant_id, document, repo, embedder)
         return ("", 202)
 
     return webhook

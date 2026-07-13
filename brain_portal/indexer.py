@@ -256,6 +256,22 @@ def index_document(
     return report
 
 
+def record_permission_denied(
+    tenant_id: str, source_type: str, repo: PortalRepository, detail: str
+) -> IndexReport:
+    run_id = _begin_sync(repo, tenant_id, source_type)
+    report = IndexReport(indexed=0, unchanged=0, deleted=0, failed=1)
+    _finish_sync(
+        repo,
+        tenant_id,
+        run_id,
+        "permission_required",
+        report,
+        _bounded_diagnostic("PermissionError", detail),
+    )
+    return report
+
+
 def _chunk_item(item: KnowledgeItem, max_chars: int = 2000) -> list[str]:
     content = f"{item.title}\n\n{item.body}".strip()
     chunks = [

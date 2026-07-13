@@ -13,6 +13,8 @@ from brain_portal.notion_webhook import create_notion_webhook_blueprint
 
 
 class FakeConnector:
+    source_type = "notion"
+
     def __init__(self, documents_by_id: dict[str, SourceDocument]):
         self.documents_by_id = documents_by_id
         self.retrieve_calls: list[str] = []
@@ -20,6 +22,17 @@ class FakeConnector:
     def fetch_document(self, tenant_id: str, page_id: str) -> SourceDocument:
         self.retrieve_calls.append(page_id)
         return self.documents_by_id[page_id]
+
+
+class DeniedConnector:
+    source_type = "notion"
+
+    def __init__(self):
+        self.retrieve_calls: list[str] = []
+
+    def fetch_document(self, tenant_id: str, page_id: str) -> SourceDocument:
+        self.retrieve_calls.append(page_id)
+        raise PermissionError("Notion access was denied for this page")
 
 
 class FakeEmbedder:
@@ -170,6 +183,31 @@ def test_webhook_reindex_is_idempotent(webhook_setup):
 
     assert connector.retrieve_calls == ["page-1", "page-1"]
     assert len(portal_repo.list_items("tenant-notion")) == 1
+
+
+def test_webhook_records_permission_required_when_fetch_is_denied(portal_repo):
+    connector = DeniedConnector()
+    blueprint = create_notion_webhook_blueprint(
+        tenant_id="tenant-notion",
+        connector=connector,
+        repo=portal_repo,
+        embedder=FakeEmbedder(),
+        webhook_secret="shhh",
+    )
+    app = Flask(__name__)
+    app.register_blueprint(blueprint)
+    app.config.update(TESTING=True)
+    client = app.test_client()
+
+    response = _signed_post(
+        client, "shhh", {"type": "page.content_updated", "entity": {"id": "page-1"}}
+    )
+
+    assert response.status_code == 202
+    assert connector.retrieve_calls == ["page-1"]
+    sync = portal_repo.latest_sync("tenant-notion", "notion")
+    assert sync.status == "permission_required"
+    assert portal_repo.get_item("tenant-notion", "page-1") is None
 
 
 def test_webhook_returns_401_without_reading_payload_for_malformed_body(webhook_setup):
