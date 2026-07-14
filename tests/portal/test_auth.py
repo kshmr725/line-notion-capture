@@ -809,3 +809,81 @@ def test_confirm_onboarding_without_a_proposal_id_redirects_safely(
 
     assert response.status_code in (302, 303)
     assert response.headers["Location"].endswith("/onboarding")
+
+
+def test_confirm_onboarding_does_not_wipe_existing_items_on_an_empty_refetch(
+    auth_app, repository, transport, monkeypatch
+):
+    client = auth_app.test_client()
+    user_id = _sign_in(client, repository, transport, "friend@example.com")
+    _connect_notion(client, repository, transport, monkeypatch, user_id)
+    _mock_notion_workspace(
+        monkeypatch, [_notion_page("page-1", "Restaking Thesis", "Web3 Research")]
+    )
+    client.post("/onboarding/connect-source", data={"database_id": "db-1"})
+    connection = portal_connect(repository.path)
+    proposal_id = connection.execute(
+        "SELECT proposal_id FROM cloud_proposals WHERE tenant_id = ?", (user_id,)
+    ).fetchone()["proposal_id"]
+    connection.close()
+    client.post("/onboarding/confirm", data={"proposal_id": proposal_id})
+    assert len(PortalRepository(repository.path).list_items(user_id)) == 1
+
+    # A later confirm whose workspace fetch legitimately comes back empty
+    # (pages temporarily unshared, filters, transient state) must not wipe
+    # out everything that was already indexed.
+    _mock_notion_workspace(monkeypatch, [])
+    client.post("/onboarding/confirm", data={"proposal_id": proposal_id})
+
+    assert len(PortalRepository(repository.path).list_items(user_id)) == 1
+
+
+def test_connect_source_page_blocks_reconnect_once_onboarding_is_ready(
+    auth_app, repository, transport, monkeypatch
+):
+    client = auth_app.test_client()
+    user_id = _sign_in(client, repository, transport, "friend@example.com")
+    _connect_notion(client, repository, transport, monkeypatch, user_id)
+    _mock_notion_workspace(monkeypatch, [_notion_page("page-1", "Note", "Web3 Research")])
+    client.post("/onboarding/connect-source", data={"database_id": "db-1"})
+    connection = portal_connect(repository.path)
+    proposal_id = connection.execute(
+        "SELECT proposal_id FROM cloud_proposals WHERE tenant_id = ?", (user_id,)
+    ).fetchone()["proposal_id"]
+    connection.close()
+    client.post("/onboarding/confirm", data={"proposal_id": proposal_id})
+
+    page_response = client.get("/onboarding/connect-source", follow_redirects=False)
+    submit_response = client.post(
+        "/onboarding/connect-source", data={"database_id": "db-2"}, follow_redirects=False
+    )
+
+    assert page_response.status_code in (302, 303)
+    assert page_response.headers["Location"].endswith("/onboarding")
+    assert submit_response.status_code in (302, 303)
+    assert submit_response.headers["Location"].endswith("/onboarding")
+    assert len(PortalRepository(repository.path).list_items(user_id)) == 1
+
+
+def test_confirm_onboarding_blocks_once_onboarding_is_already_ready(
+    auth_app, repository, transport, monkeypatch
+):
+    client = auth_app.test_client()
+    user_id = _sign_in(client, repository, transport, "friend@example.com")
+    _connect_notion(client, repository, transport, monkeypatch, user_id)
+    _mock_notion_workspace(monkeypatch, [_notion_page("page-1", "Note", "Web3 Research")])
+    client.post("/onboarding/connect-source", data={"database_id": "db-1"})
+    connection = portal_connect(repository.path)
+    proposal_id = connection.execute(
+        "SELECT proposal_id FROM cloud_proposals WHERE tenant_id = ?", (user_id,)
+    ).fetchone()["proposal_id"]
+    connection.close()
+    client.post("/onboarding/confirm", data={"proposal_id": proposal_id})
+
+    _mock_notion_workspace(monkeypatch, [])
+    response = client.post(
+        "/onboarding/confirm", data={"proposal_id": proposal_id}, follow_redirects=False
+    )
+
+    assert response.status_code in (302, 303)
+    assert len(PortalRepository(repository.path).list_items(user_id)) == 1

@@ -154,6 +154,8 @@ def create_auth_blueprint(
         principal = resolve_principal(settings, repository, clock)
         if principal is None:
             return redirect(url_for("auth.login_page"))
+        if _onboarding_status(repository, principal.user_id) == "ready":
+            return redirect(url_for("auth.onboarding"))
         connection_config = _notion_connection_config(repository, principal.user_id)
         if connection_config is None:
             return redirect(url_for("auth.onboarding"))
@@ -170,6 +172,8 @@ def create_auth_blueprint(
         principal = resolve_principal(settings, repository, clock)
         if principal is None:
             return redirect(url_for("auth.login_page"))
+        if _onboarding_status(repository, principal.user_id) == "ready":
+            return redirect(url_for("auth.onboarding"))
         database_id = request.form.get("database_id", "").strip()
         if not database_id:
             return redirect(url_for("auth.connect_source_page", source_error="1"))
@@ -196,6 +200,8 @@ def create_auth_blueprint(
         principal = resolve_principal(settings, repository, clock)
         if principal is None:
             return redirect(url_for("auth.login_page"))
+        if _onboarding_status(repository, principal.user_id) == "ready":
+            return redirect(url_for("auth.onboarding"))
         proposal_id = request.form.get("proposal_id", "").strip()
         connection_config = _notion_connection_config(repository, principal.user_id)
         database_id = (connection_config or {}).get("database_id")
@@ -208,6 +214,11 @@ def create_auth_blueprint(
             )
             documents = list(connector.iter_documents(principal.user_id))
         except Exception:
+            return redirect(url_for("auth.onboarding", oauth_error="1"))
+        if not documents:
+            # A legitimately empty refetch must never be allowed to reach
+            # run_index: with zero seen source_ids it would soft-delete
+            # every previously indexed item for this tenant/source_type.
             return redirect(url_for("auth.onboarding", oauth_error="1"))
         gemini_key = settings.gemini_api_key.strip()
         embedder = (
@@ -656,6 +667,11 @@ def _onboarding_state_for_user(repository, user_id: str) -> OnboardingState | No
     if row is None:
         return None
     return OnboardingState(tenant_id=row["tenant_id"], status=row["onboarding_status"])
+
+
+def _onboarding_status(repository, user_id: str) -> str:
+    state = _onboarding_state_for_user(repository, user_id)
+    return state.status if state is not None else "needs_source"
 
 
 def _set_session_cookie(response: Response, settings: PortalSettings, session_id: str) -> None:
