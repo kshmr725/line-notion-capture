@@ -1,0 +1,43 @@
+{% extends "portal/base.html" %}
+{% block content %}
+<div class="workspace-page chart-view-page">
+  <header class="page-intro">
+    <p class="eyebrow">{{ cloud.name }}</p>
+    <h1>{{ chart.title }}</h1>
+    <p>{{ chart.summary }}</p>
+  </header>
+  <nav class="chart-view-actions" aria-label="圖表選項">
+    {% for key, label in column_choices %}
+    <a class="quiet-action{% if key == column %} chart-action-active{% endif %}" href="{{ url_for('portal.view_chart', cloud=cloud.key, column=key, chart_type=chart_type) }}">{{ label }}</a>
+    {% endfor %}
+  </nav>
+  <nav class="chart-view-actions" aria-label="圖表類型">
+    {% for kind, label in (('bar', '長條圖'), ('donut', '圓餅圖'), ('timeline', '時間軸')) %}
+    <a class="quiet-action{% if kind == chart_type %} chart-action-active{% endif %}" href="{{ url_for('portal.view_chart', cloud=cloud.key, column=column, chart_type=kind) }}">{{ label }}</a>
+    {% endfor %}
+  </nav>
+  <figure class="chart-figure">
+    <svg class="chart-svg" viewBox="0 0 480 {{ (chart_rows|length * 44) or 44 }}" width="480" height="{{ (chart_rows|length * 44) or 44 }}" role="img" aria-labelledby="chart-title chart-desc">
+      <title id="chart-title">{{ chart.title }}</title>
+      <desc id="chart-desc">{{ chart.summary }}</desc>
+      {% for row in chart_rows %}
+      <text x="0" y="{{ loop.index0 * 44 + 16 }}" class="chart-bar-label">{{ row.label }}</text>
+      <rect x="0" y="{{ loop.index0 * 44 + 22 }}" width="{{ (row.percent * 4.6)|round(1) }}" height="16" rx="3"></rect>
+      <text x="{{ (row.percent * 4.6)|round(1) + 8 }}" y="{{ loop.index0 * 44 + 34 }}" class="chart-bar-value">{{ row.value|int }}</text>
+      {% endfor %}
+    </svg>
+    <figcaption class="visually-hidden">{{ chart.summary }}</figcaption>
+  </figure>
+  <table class="chart-data-table">
+    <caption class="visually-hidden">{{ chart.title }} 數據</caption>
+    <thead><tr><th scope="col">{{ chart.axis_label }}</th><th scope="col">筆數</th></tr></thead>
+    <tbody>
+      {% for row in chart_rows %}
+      <tr><th scope="row">{{ row.label }}</th><td>{{ row.value|int }}</td></tr>
+      {% else %}
+      <tr><td colspan="2">沒有符合條件的資料。</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

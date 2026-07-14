@@ -1329,3 +1329,68 @@ def test_view_table_never_serves_another_tenants_rows(portal_setup):
     html = client.get("/views/table?cloud=web3").get_data(as_text=True)
 
     assert "secret-web3" not in html
+
+
+def test_view_chart_renders_a_labeled_svg_and_data_table(portal_setup):
+    client, repository, *_ = portal_setup
+    repository.items = [
+        item("a", cloud_key="web3", concepts=("restaking",)),
+        item("b", cloud_key="web3", concepts=("restaking",)),
+        item("c", cloud_key="web3", concepts=("mev",)),
+    ]
+
+    response = client.get("/views/chart?cloud=web3&column=sector")
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "restaking" in html
+    assert "mev" in html
+    assert "<svg" in html
+    assert '<title id="chart-title">' in html
+    assert '<desc id="chart-desc">' in html
+
+
+def test_view_chart_404s_for_an_unknown_cloud(portal_setup):
+    client, *_ = portal_setup
+
+    assert client.get("/views/chart?cloud=not-a-real-cloud").status_code == 404
+
+
+def test_view_chart_ignores_a_disallowed_column(portal_setup):
+    client, repository, *_ = portal_setup
+    repository.items = [item("a", cloud_key="web3", concepts=("restaking",))]
+
+    response = client.get("/views/chart?cloud=web3&column=name")
+
+    assert response.status_code == 200
+    assert "賽道分佈" in response.get_data(as_text=True)
+
+
+def test_view_chart_falls_back_to_bar_for_an_unknown_chart_type(portal_setup):
+    client, repository, *_ = portal_setup
+    repository.items = [item("a", cloud_key="web3", concepts=("restaking",))]
+
+    response = client.get("/views/chart?cloud=web3&column=sector&chart_type=pie")
+
+    assert response.status_code == 200
+
+
+def test_view_chart_never_serves_another_tenants_rows(portal_setup):
+    client, repository, *_ = portal_setup
+    repository.items = [
+        item("web3-a", cloud_key="web3", concepts=("restaking",)),
+        item("secret-web3", tenant_id="other-tenant", cloud_key="web3", concepts=("mev",)),
+    ]
+
+    html = client.get("/views/chart?cloud=web3&column=sector").get_data(as_text=True)
+
+    assert "mev" not in html
+
+
+def test_table_view_links_to_the_chart_view(portal_setup):
+    client, repository, *_ = portal_setup
+    repository.items = [item("web3-a", cloud_key="web3", concepts=("restaking",))]
+
+    html = client.get("/views/table?cloud=web3").get_data(as_text=True)
+
+    assert "/views/chart?cloud=web3" in html

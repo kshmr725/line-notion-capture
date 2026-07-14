@@ -5,7 +5,7 @@ import io
 import json
 from typing import Callable, Mapping, Sequence
 
-from brain_portal.models import DerivedTable, DerivedView, KnowledgeItem, TableRow
+from brain_portal.models import ChartSpec, DerivedTable, DerivedView, KnowledgeItem, TableRow
 from brain_portal.presentation import clean_display_text, public_type_label
 
 
@@ -20,6 +20,7 @@ CLOUD_TABLE_COLUMNS: dict[str, tuple[tuple[str, str], ...]] = {
     ),
     "food": (
         ("name", "店名"),
+        ("area", "區域"),
         ("rating", "評分"),
         ("address", "地址"),
         ("hours", "營業時間"),
@@ -44,6 +45,7 @@ _COLUMN_EXTRACTORS: dict[str, Callable[[KnowledgeItem], str]] = {
     "thesis": lambda item: clean_display_text(item.summary),
     "updated_at": lambda item: item.updated_at,
     "name": lambda item: str((item.place or {}).get("name") or item.title),
+    "area": lambda item: str((item.place or {}).get("area") or ""),
     "rating": lambda item: "",
     "address": lambda item: str((item.place or {}).get("address") or ""),
     "hours": lambda item: "",
@@ -120,6 +122,59 @@ def _apply_filters(
 
 def source_refs_for_view(table: DerivedTable) -> tuple[str, ...]:
     return tuple(row.source_id for row in table.rows)
+
+
+CHART_TYPES = ("bar", "donut", "timeline")
+
+
+def build_chart(table: DerivedTable, chart_type: str) -> ChartSpec:
+    if chart_type not in CHART_TYPES:
+        raise ValueError(f"unsupported chart_type: {chart_type}")
+
+    if chart_type == "timeline":
+        axis_label = "更新月份"
+        groups = _group_by_month(table)
+    else:
+        axis_label = table.column_labels[0] if table.column_labels else "分類"
+        groups = _group_by_first_column(table)
+
+    labels = tuple(groups.keys())
+    values = tuple(float(len(ids)) for ids in groups.values())
+    source_ids = tuple(source_id for ids in groups.values() for source_id in ids)
+    return ChartSpec(
+        chart_type=chart_type,
+        title=f"{axis_label}分佈",
+        axis_label=axis_label,
+        labels=labels,
+        values=values,
+        summary=_chart_summary(axis_label, groups),
+        source_ids=source_ids,
+    )
+
+
+def _group_by_first_column(table: DerivedTable) -> dict[str, tuple[str, ...]]:
+    buckets: dict[str, list[str]] = {}
+    for row in table.rows:
+        value = row.values[0] if row.values else NOT_PROVIDED
+        buckets.setdefault(value, []).append(row.source_id)
+    ordered = sorted(buckets.items(), key=lambda pair: (-len(pair[1]), pair[0]))
+    return {label: tuple(ids) for label, ids in ordered}
+
+
+def _group_by_month(table: DerivedTable) -> dict[str, tuple[str, ...]]:
+    buckets: dict[str, list[str]] = {}
+    for row in table.rows:
+        month = row.updated_at[:7] if len(row.updated_at) >= 7 else NOT_PROVIDED
+        buckets.setdefault(month, []).append(row.source_id)
+    ordered = sorted(buckets.items(), key=lambda pair: pair[0])
+    return {label: tuple(ids) for label, ids in ordered}
+
+
+def _chart_summary(axis_label: str, groups: dict[str, tuple[str, ...]]) -> str:
+    if not groups:
+        return f"目前沒有資料可以建立{axis_label}分佈圖。"
+    parts = [f"{label} {len(ids)} 筆" for label, ids in groups.items()]
+    return f"依{axis_label}分佈：" + "、".join(parts) + "。"
 
 
 def serialize_view(view: DerivedView) -> str:

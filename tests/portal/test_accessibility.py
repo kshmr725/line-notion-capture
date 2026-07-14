@@ -150,7 +150,9 @@ def test_wordmark_and_card_primary_links_have_touch_target_contract(accessible_c
     assert "min-height:44px" in css
 
 
-@pytest.mark.parametrize("path", ["/views/new?cloud=ai", "/views/table?cloud=ai"])
+@pytest.mark.parametrize(
+    "path", ["/views/new?cloud=ai", "/views/table?cloud=ai", "/views/chart?cloud=ai"]
+)
 def test_view_pages_have_semantic_shell_skip_link_and_one_h1(accessible_client, path):
     html = accessible_client.get(path).get_data(as_text=True)
     parser = StructureParser()

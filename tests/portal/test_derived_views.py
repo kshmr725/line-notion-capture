@@ -6,6 +6,7 @@ import pytest
 
 from brain_portal.derived_views import (
     CLOUD_TABLE_COLUMNS,
+    build_chart,
     build_table,
     column_choices_for_cloud,
     deserialize_view,
@@ -241,6 +242,100 @@ def test_render_table_markdown_neutralizes_formula_injection(formula):
 
     assert f"| {formula} |" not in markdown
     assert formula in markdown
+
+
+def test_build_chart_web3_sector_groups_by_the_first_column():
+    items = [
+        _item("a", "A", cloud_key="web3", concepts=("restaking",)),
+        _item("b", "B", cloud_key="web3", concepts=("restaking",)),
+        _item("c", "C", cloud_key="web3", concepts=("mev",)),
+    ]
+    table = build_table(items, ("sector",), {})
+
+    chart = build_chart(table, "bar")
+
+    assert chart.chart_type == "bar"
+    assert chart.axis_label == "賽道"
+    assert dict(zip(chart.labels, chart.values)) == {"restaking": 2.0, "mev": 1.0}
+    assert set(chart.source_ids) == {"a", "b", "c"}
+
+
+def test_build_chart_food_groups_by_selected_column():
+    items = [
+        _item("a", "A", cloud_key="food", place={"name": "A", "area": "Da'an"}),
+        _item("b", "B", cloud_key="food", place={"name": "B", "area": "Da'an"}),
+        _item("c", "C", cloud_key="food", place={"name": "C", "area": "Xinyi"}),
+    ]
+    table = build_table(items, ("area",), {})
+
+    chart = build_chart(table, "donut")
+
+    assert dict(zip(chart.labels, chart.values)) == {"Da'an": 2.0, "Xinyi": 1.0}
+
+
+def test_build_chart_ai_reliability_honestly_shows_the_未提供_bucket():
+    items = [_item("a", "A", cloud_key="ai", item_type="agent")]
+    table = build_table(items, ("reliability",), {})
+
+    chart = build_chart(table, "bar")
+
+    assert chart.labels == ("未提供",)
+    assert chart.values == (1.0,)
+
+
+def test_build_chart_timeline_groups_by_month():
+    items = [
+        _item("a", "A", updated_at="2026-07-01T00:00:00+00:00"),
+        _item("b", "B", updated_at="2026-07-15T00:00:00+00:00"),
+        _item("c", "C", updated_at="2026-06-01T00:00:00+00:00"),
+    ]
+    table = build_table(items, ("sector",), {})
+
+    chart = build_chart(table, "timeline")
+
+    assert chart.labels == ("2026-06", "2026-07")
+    assert chart.values == (1.0, 2.0)
+
+
+def test_build_chart_is_deterministic():
+    items = [
+        _item("a", "A", concepts=("restaking",)),
+        _item("b", "B", concepts=("mev",)),
+    ]
+    table = build_table(items, ("sector",), {})
+
+    first = build_chart(table, "bar")
+    second = build_chart(table, "bar")
+
+    assert first == second
+
+
+def test_build_chart_summary_is_non_empty_accessible_text():
+    items = [_item("a", "A", concepts=("restaking",))]
+    table = build_table(items, ("sector",), {})
+
+    chart = build_chart(table, "bar")
+
+    assert chart.summary
+    assert "restaking" in chart.summary
+
+
+def test_build_chart_rejects_an_unsupported_chart_type():
+    items = [_item("a", "A", concepts=("restaking",))]
+    table = build_table(items, ("sector",), {})
+
+    with pytest.raises(ValueError):
+        build_chart(table, "pie")
+
+
+def test_build_chart_handles_an_empty_table_safely():
+    table = build_table([], ("sector",), {})
+
+    chart = build_chart(table, "bar")
+
+    assert chart.labels == ()
+    assert chart.values == ()
+    assert chart.summary
 
 
 def test_render_table_csv_never_duplicates_the_updated_at_column():

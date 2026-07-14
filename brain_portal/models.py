@@ -95,6 +95,17 @@ class DerivedTable:
 
 
 @dataclass(frozen=True)
+class ChartSpec:
+    chart_type: str
+    title: str
+    axis_label: str
+    labels: tuple[str, ...]
+    values: tuple[float, ...]
+    summary: str
+    source_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class SyncRun:
     source_type: str
     status: str

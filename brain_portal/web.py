@@ -18,7 +18,9 @@ from brain_portal.models import (
 )
 from brain_portal.answers import QUERY_LIMIT
 from brain_portal.derived_views import (
+    CHART_TYPES,
     CLOUD_TABLE_COLUMNS,
+    build_chart,
     build_table,
     column_choices_for_cloud,
     render_table_csv,
@@ -400,6 +402,54 @@ def create_portal_blueprint(dependencies: PortalDependencies) -> Blueprint:
             view_config=serialize_view(table.view),
             csv_url=url_for("portal.view_table", format="csv", **export_args),
             markdown_url=url_for("portal.view_table", format="markdown", **export_args),
+            chart_url=url_for(
+                "portal.view_chart", cloud=cloud_key, column=selected_columns[0]
+            ),
+        )
+
+    @portal.get("/views/chart")
+    def view_chart():
+        cloud_key = request.args.get("cloud", "").strip()
+        cloud_definition = next((c for c in CLOUDS if c["key"] == cloud_key), None)
+        if cloud_definition is None or cloud_key not in CLOUD_TABLE_COLUMNS:
+            abort(404)
+        allowed_columns = {key for key, _ in column_choices_for_cloud(cloud_key)}
+        default_column = column_choices_for_cloud(cloud_key)[0][0]
+        column = request.args.get("column", "").strip()
+        if column not in allowed_columns:
+            column = default_column
+        chart_type = request.args.get("chart_type", "bar").strip()
+        if chart_type not in CHART_TYPES:
+            chart_type = "bar"
+        item_type = request.args.get("type", "").strip()
+        concept = request.args.get("concept", "").strip()
+        filters = {"cloud": cloud_key}
+        if item_type:
+            filters["type"] = item_type
+        if concept:
+            filters["concept"] = concept
+        items = _tenant_items(dependencies)
+        table = build_table(items, (column,), filters)
+        chart = build_chart(table, chart_type)
+        max_value = max(chart.values) if chart.values else 0.0
+        chart_rows = [
+            {
+                "label": label,
+                "value": value,
+                "percent": round((value / max_value) * 100, 2) if max_value else 0,
+            }
+            for label, value in zip(chart.labels, chart.values)
+        ]
+        return render_template(
+            "portal/chart_view.html",
+            page_title=f"{cloud_definition['name']} 圖表",
+            tenant=_tenant_view(),
+            cloud=cloud_definition,
+            chart=chart,
+            chart_rows=chart_rows,
+            column=column,
+            column_choices=column_choices_for_cloud(cloud_key),
+            chart_type=chart_type,
         )
 
     @portal.get("/sync")
