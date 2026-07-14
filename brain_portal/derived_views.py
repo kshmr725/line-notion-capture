@@ -155,6 +155,19 @@ def deserialize_view(payload: str) -> DerivedView:
         raise ValueError("invalid view configuration") from error
 
 
+_FORMULA_PREFIXES = ("=", "+", "-", "@")
+
+
+def _neutralize_formula(value: str) -> str:
+    """Prevent CSV/Markdown-to-spreadsheet formula injection (CWE-1236):
+    a cell starting with =, +, -, or @ gets interpreted as a formula by
+    Excel/Sheets. Source content (titles, concepts, summaries) is free-form
+    and not trusted to avoid these characters."""
+    if value.startswith(_FORMULA_PREFIXES):
+        return "'" + value
+    return value
+
+
 def render_table_csv(table: DerivedTable) -> str:
     include_updated_at = "updated_at" not in table.view.columns
     buffer = io.StringIO()
@@ -163,7 +176,10 @@ def render_table_csv(table: DerivedTable) -> str:
     writer.writerow(("標題", *table.column_labels, *trailer))
     for row in table.rows:
         trailer_values = (row.url, row.updated_at) if include_updated_at else (row.url,)
-        writer.writerow((row.title, *row.values, *trailer_values))
+        writer.writerow(
+            _neutralize_formula(cell)
+            for cell in (row.title, *row.values, *trailer_values)
+        )
     return buffer.getvalue()
 
 
@@ -178,5 +194,9 @@ def render_table_markdown(table: DerivedTable) -> str:
     for row in table.rows:
         trailer_values = (row.url, row.updated_at) if include_updated_at else (row.url,)
         cells = (row.title, *row.values, *trailer_values)
-        lines.append("| " + " | ".join(cell.replace("|", "\\|") for cell in cells) + " |")
+        lines.append(
+            "| "
+            + " | ".join(_neutralize_formula(cell.replace("|", "\\|")) for cell in cells)
+            + " |"
+        )
     return "\n".join(lines)

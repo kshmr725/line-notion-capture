@@ -220,6 +220,29 @@ def test_render_table_csv_includes_header_and_source_links():
     assert "/item/a" in lines[1]
 
 
+@pytest.mark.parametrize("formula", ["=1+1", "+1+1", "-1+1", "@SUM(1)"])
+def test_render_table_csv_neutralizes_formula_injection(formula):
+    items = [_item("a", formula, concepts=(formula,))]
+    table = build_table(items, ("sector",), {})
+
+    csv_text = render_table_csv(table)
+
+    lines = csv_text.strip().splitlines()
+    assert not lines[1].startswith(formula)
+    assert formula in lines[1]
+
+
+@pytest.mark.parametrize("formula", ["=1+1", "+1+1", "-1+1", "@SUM(1)"])
+def test_render_table_markdown_neutralizes_formula_injection(formula):
+    items = [_item("a", formula, concepts=(formula,))]
+    table = build_table(items, ("sector",), {})
+
+    markdown = render_table_markdown(table)
+
+    assert f"| {formula} |" not in markdown
+    assert formula in markdown
+
+
 def test_render_table_csv_never_duplicates_the_updated_at_column():
     items = [_item("a", "Restaking Thesis", concepts=("restaking",))]
     table = build_table(items, ("sector", "updated_at"), {})
