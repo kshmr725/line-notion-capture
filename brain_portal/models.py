@@ -106,6 +106,14 @@ class ChartSpec:
 
 
 @dataclass(frozen=True)
+class SlideSpec:
+    title: str
+    body: str
+    source_ids: tuple[str, ...]
+    updated_at: str | None = None
+
+
+@dataclass(frozen=True)
 class SyncRun:
     source_type: str
     status: str

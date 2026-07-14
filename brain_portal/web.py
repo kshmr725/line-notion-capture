@@ -21,6 +21,7 @@ from brain_portal.derived_views import (
     CHART_TYPES,
     CLOUD_TABLE_COLUMNS,
     build_chart,
+    build_slides,
     build_table,
     column_choices_for_cloud,
     render_table_csv,
@@ -458,6 +459,51 @@ def create_portal_blueprint(dependencies: PortalDependencies) -> Blueprint:
             column=column,
             column_choices=column_choices_for_cloud(cloud_key),
             chart_type=chart_type,
+        )
+
+    @portal.get("/views/slides")
+    def view_slides():
+        cloud_key = request.args.get("cloud", "").strip()
+        cloud_definition = next((c for c in CLOUDS if c["key"] == cloud_key), None)
+        if cloud_definition is None or cloud_key not in CLOUD_TABLE_COLUMNS:
+            abort(404)
+        allowed_columns = {key for key, _ in column_choices_for_cloud(cloud_key)}
+        default_columns = [key for key, _ in column_choices_for_cloud(cloud_key)]
+        selected_columns = [
+            column
+            for column in request.args.getlist("column")
+            if column in allowed_columns
+        ] or default_columns
+        item_type = request.args.get("type", "").strip()
+        concept = request.args.get("concept", "").strip()
+        filters = {"cloud": cloud_key}
+        if item_type:
+            filters["type"] = item_type
+        if concept:
+            filters["concept"] = concept
+        items = _tenant_items(dependencies)
+        table = build_table(items, selected_columns, filters)
+        slides = build_slides(table, f"{cloud_definition['name']}簡報")
+        source_titles = {
+            item.source_id: item.title
+            for item in items
+            if item.tenant_id == g.portal_tenant.tenant_id
+        }
+        view_args = {"cloud": cloud_key, "column": selected_columns}
+        if item_type:
+            view_args["type"] = item_type
+        if concept:
+            view_args["concept"] = concept
+        return render_template(
+            "portal/slides_view.html",
+            page_title=f"{cloud_definition['name']}簡報",
+            tenant=_tenant_view(),
+            cloud=cloud_definition,
+            slides=slides,
+            source_titles=source_titles,
+            table_url=url_for("portal.view_table", **view_args),
+            chart_url=url_for("portal.view_chart", cloud=cloud_key, column=selected_columns[0]),
+            source_count=len(table.rows),
         )
 
     @portal.get("/sync")

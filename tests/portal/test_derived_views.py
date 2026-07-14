@@ -7,6 +7,7 @@ import pytest
 from brain_portal.derived_views import (
     CLOUD_TABLE_COLUMNS,
     build_chart,
+    build_slides,
     build_table,
     column_choices_for_cloud,
     deserialize_view,
@@ -357,3 +358,46 @@ def test_render_table_markdown_includes_header_and_rows():
     assert "| 標題 | 賽道 | 來源連結 | 更新時間 |" in markdown
     assert "Restaking Thesis" in markdown
     assert "/item/a" in markdown
+
+
+def test_build_slides_creates_source_linked_claim_clusters():
+    items = [
+        _item(
+            "a",
+            "Restaking Thesis",
+            concepts=("restaking", "validators"),
+            summary="Restaking lets validators secure multiple networks.",
+            updated_at="2026-07-10T00:00:00+00:00",
+        ),
+        _item(
+            "b",
+            "MEV Research",
+            concepts=("mev",),
+            summary="MEV changes the order in which transactions execute.",
+            updated_at="2026-07-11T00:00:00+00:00",
+        ),
+    ]
+    table = build_table(items, ("sector", "thesis"), {})
+
+    slides = build_slides(table, "Web3 研究簡報")
+
+    assert slides[0].title == "Web3 研究簡報"
+    assert "2 筆" in slides[0].body
+    assert slides[0].source_ids == ("a", "b")
+    assert [slide.title for slide in slides[1:]] == [
+        "Restaking Thesis",
+        "MEV Research",
+    ]
+    assert slides[1].source_ids == ("a",)
+    assert slides[1].updated_at == "2026-07-10T00:00:00+00:00"
+    assert "賽道：restaking" in slides[1].body
+
+
+def test_build_slides_handles_an_empty_table_without_fake_claims():
+    table = build_table([], ("sector",), {})
+
+    slides = build_slides(table, "空白研究簡報")
+
+    assert len(slides) == 1
+    assert slides[0].source_ids == ()
+    assert "沒有資料" in slides[0].body

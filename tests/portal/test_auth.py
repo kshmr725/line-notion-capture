@@ -48,6 +48,10 @@ def settings():
         session_ttl_days=14,
         magic_link_ttl_minutes=15,
         dev_auth=True,
+        # Auth/onboarding tests must never inherit a developer's ambient AI
+        # keys and make a live embedding request during indexing.
+        gemini_api_key="",
+        deepseek_api_key="",
         notion_oauth_client_id="client-id",
         notion_oauth_client_secret="client-secret",
         notion_oauth_redirect_url="https://portal.example.com/oauth/notion/callback",

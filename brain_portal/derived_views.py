@@ -5,7 +5,14 @@ import io
 import json
 from typing import Callable, Mapping, Sequence
 
-from brain_portal.models import ChartSpec, DerivedTable, DerivedView, KnowledgeItem, TableRow
+from brain_portal.models import (
+    ChartSpec,
+    DerivedTable,
+    DerivedView,
+    KnowledgeItem,
+    SlideSpec,
+    TableRow,
+)
 from brain_portal.presentation import clean_display_text, public_type_label
 
 
@@ -122,6 +129,75 @@ def _apply_filters(
 
 def source_refs_for_view(table: DerivedTable) -> tuple[str, ...]:
     return tuple(row.source_id for row in table.rows)
+
+
+def build_slides(
+    view: DerivedTable | DerivedView,
+    title: str,
+) -> tuple[SlideSpec, ...]:
+    """Build a deterministic, source-linked HTML slide model.
+
+    A slide is deliberately a small claim cluster rather than an AI-written
+    narrative.  The first slide describes the selected view; each following
+    slide represents one canonical source row and carries that row's source ID
+    and update timestamp for the template to render as a citation footer.
+    A bare ``DerivedView`` is accepted for callers that only have a saved view
+    configuration; it produces an honest no-data slide instead of inventing
+    claims.
+    """
+    if isinstance(view, DerivedView):
+        return (
+            SlideSpec(
+                title=title,
+                body="這份檢視設定尚未載入資料，沒有可引用的來源。",
+                source_ids=(),
+            ),
+        )
+
+    rows = view.rows
+    if not rows:
+        return (
+            SlideSpec(
+                title=title,
+                body="目前沒有資料可以建立簡報。",
+                source_ids=(),
+            ),
+        )
+
+    axis = view.column_labels[0] if view.column_labels else "資料"
+    source_ids = tuple(row.source_id for row in rows)
+    overview_updated_at = max(row.updated_at for row in rows)
+    slides = [
+        SlideSpec(
+            title=title,
+            body=f"共 {len(rows)} 筆資料，依{axis}整理。",
+            source_ids=source_ids,
+            updated_at=overview_updated_at,
+        )
+    ]
+    for row in rows:
+        facts = [
+            f"{label}：{_slide_value(value)}"
+            for label, value in zip(view.column_labels, row.values)
+            if _slide_value(value)
+        ]
+        body = " · ".join(facts) or "此來源目前沒有可顯示欄位。"
+        slides.append(
+            SlideSpec(
+                title=clean_display_text(row.title),
+                body=body,
+                source_ids=(row.source_id,),
+                updated_at=row.updated_at,
+            )
+        )
+    return tuple(slides)
+
+
+def _slide_value(value: str) -> str:
+    text = clean_display_text(value)
+    if not text or text == NOT_PROVIDED:
+        return ""
+    return text[:280]
 
 
 CHART_TYPES = ("bar", "donut", "timeline")

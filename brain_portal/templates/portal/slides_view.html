@@ -1,0 +1,43 @@
+{% extends "portal/base.html" %}
+{% block content %}
+<div class="workspace-page slides-view-page">
+  <header class="page-intro">
+    <p class="eyebrow">{{ cloud.name }}</p>
+    <h1>{{ cloud.name }}簡報</h1>
+    <p>{{ source_count }} 筆來源已整理成可閱讀、可列印的簡報；每張投影片都保留原始來源與更新日期。</p>
+  </header>
+  <nav class="slide-controls" aria-label="簡報工具">
+    <a class="quiet-action" href="{{ table_url }}">回到表格</a>
+    <a class="quiet-action" href="{{ chart_url }}">看圖表</a>
+    <button type="button" onclick="window.print()">列印簡報</button>
+  </nav>
+  <section class="slide-deck" aria-label="{{ cloud.name }}簡報內容">
+    {% for slide in slides %}
+    <article class="slide-card" aria-labelledby="slide-title-{{ loop.index }}">
+      <header class="slide-card-header">
+        <span class="slide-number">{{ "%02d"|format(loop.index) }}</span>
+        <h2 id="slide-title-{{ loop.index }}">{{ slide.title }}</h2>
+      </header>
+      <p class="slide-body">{{ slide.body }}</p>
+      <footer class="slide-footer">
+        <div class="slide-sources">
+          <span class="slide-footer-label">來源</span>
+          {% if slide.source_ids %}
+          <ul>
+            {% for source_id in slide.source_ids %}
+            <li><a href="{{ url_for('portal.item_detail', source_id=source_id) }}">{{ source_titles.get(source_id, "來源筆記") }}</a></li>
+            {% endfor %}
+          </ul>
+          {% else %}
+          <span class="slide-empty-source">沒有可引用來源</span>
+          {% endif %}
+        </div>
+        {% if slide.updated_at %}
+        <time datetime="{{ slide.updated_at }}">更新於 {{ slide.updated_at[:10] }}</time>
+        {% endif %}
+      </footer>
+    </article>
+    {% endfor %}
+  </section>
+</div>
+{% endblock %}

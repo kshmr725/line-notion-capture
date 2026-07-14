@@ -722,6 +722,8 @@ def test_cloud_has_domain_filters_and_featured_paths(portal_setup):
     assert 'id="featured-paths"' in html
     assert "建立可靠的 Agent" in html
     assert 'data-source-id="ai-agent"' in html
+    assert 'href="/views/chart?cloud=ai"' in html
+    assert 'href="/views/slides?cloud=ai"' in html
 
 
 def test_place_and_sync_pages_use_reader_facing_states(portal_setup):
@@ -1427,3 +1429,15 @@ def test_table_view_links_to_the_chart_view(portal_setup):
     html = client.get("/views/table?cloud=web3").get_data(as_text=True)
 
     assert "/views/chart?cloud=web3" in html
+
+
+def test_view_slides_is_source_linked_and_print_ready(portal_setup):
+    client, *_ = portal_setup
+
+    html = client.get("/views/slides?cloud=ai").get_data(as_text=True)
+
+    assert 'class="slide-deck"' in html
+    assert "AI 自動化" in html
+    assert "來源" in html
+    assert "/item/ai-agent" in html
+    assert "列印簡報" in html
