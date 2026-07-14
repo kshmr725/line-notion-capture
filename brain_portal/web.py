@@ -153,6 +153,7 @@ def create_portal_blueprint(dependencies: PortalDependencies) -> Blueprint:
         concept = request.args.get("concept", "").strip() or None
         freshness = request.args.get("freshness", "").strip() or None
         place_filter = request.args.get("place", "").strip() or None
+        has_filters = any((cloud_key, item_type, concept, freshness, place_filter))
         view = {
             "query": query[:QUERY_LIMIT],
             "cloud_key": cloud_key,
@@ -166,6 +167,10 @@ def create_portal_blueprint(dependencies: PortalDependencies) -> Blueprint:
             "concept": concept,
             "freshness": freshness,
             "place_filter": place_filter,
+            "has_filters": has_filters,
+            "filter_summary": _filter_summary(
+                cloud_key, item_type, concept, freshness, place_filter
+            ),
             "types": sorted({item.item_type for item in items}),
             "type_labels": {
                 item.item_type: public_type_label(item.item_type) for item in items
@@ -175,31 +180,57 @@ def create_portal_blueprint(dependencies: PortalDependencies) -> Blueprint:
         status = 200
         if view["query_too_long"]:
             status = 400
-        elif query:
+        elif query or has_filters:
             try:
-                raw_results = dependencies.search_service(
-                    g.portal_tenant.tenant_id,
-                    query,
-                    cloud_key,
-                )
                 allowed_items = {item.source_id: item for item in items}
-                hits = [
-                    SearchHit(
-                        item=allowed_items[hit.item.source_id],
-                        score=hit.score,
-                        matched_by=hit.matched_by,
+                if query:
+                    raw_results = dependencies.search_service(
+                        g.portal_tenant.tenant_id,
+                        query,
+                        cloud_key,
                     )
-                    for hit in raw_results.hits
-                    if hit.item.source_id in allowed_items
-                ]
+                    hits = [
+                        SearchHit(
+                            item=allowed_items[hit.item.source_id],
+                            score=hit.score,
+                            matched_by=hit.matched_by,
+                        )
+                        for hit in raw_results.hits
+                        if hit.item.source_id in allowed_items
+                    ]
+                    degraded = raw_results.degraded
+                else:
+                    hits = [
+                        SearchHit(item=entry, score=0.0, matched_by=("filter",))
+                        for entry in items
+                    ]
+                    degraded = False
                 hits = _filter_hits(
                     hits, cloud_key, item_type, concept, freshness, place_filter
                 )
-                answer = dependencies.answer_service(query, hits) if hits else None
+                if query and has_filters and not hits:
+                    fallback_hits = [
+                        SearchHit(item=entry, score=0.0, matched_by=("catalog",))
+                        for entry in items
+                        if _item_matches_query(entry, query)
+                    ]
+                    hits = _filter_hits(
+                        fallback_hits,
+                        cloud_key,
+                        item_type,
+                        concept,
+                        freshness,
+                        place_filter,
+                    )
+                answer = (
+                    dependencies.answer_service(query, hits)
+                    if query and hits
+                    else None
+                )
                 view.update(
                     results=[_item_card(hit.item) for hit in hits],
                     answer=_answer_view(answer, allowed_items),
-                    degraded=raw_results.degraded,
+                    degraded=degraded,
                 )
             except Exception:
                 view["error"] = True
@@ -468,6 +499,42 @@ def _filter_hits(
                 continue
         filtered.append(hit)
     return filtered
+
+
+def _item_matches_query(item: KnowledgeItem, query: str) -> bool:
+    needle = clean_display_text(query).casefold()
+    if not needle:
+        return False
+    values = [item.title, item.summary, item.body, *item.concepts]
+    if item.place:
+        values.extend(
+            str(value)
+            for value in item.place.values()
+            if isinstance(value, (str, int, float))
+        )
+    haystack = clean_display_text(" ".join(values)).casefold()
+    return needle in haystack
+
+
+def _filter_summary(
+    cloud_key: str | None,
+    item_type: str | None,
+    concept: str | None,
+    freshness: str | None,
+    place_filter: str | None,
+) -> str:
+    values = []
+    if cloud_key:
+        values.append(public_cloud_label(cloud_key))
+    if item_type:
+        values.append(public_type_label(item_type))
+    if concept:
+        values.append(concept)
+    if freshness:
+        values.append("最近 7 天" if freshness == "7d" else "最近 30 天")
+    if place_filter == "with_place":
+        values.append("有地點資料")
+    return " · ".join(values)
 
 
 def _canonical_action(item: KnowledgeItem) -> dict[str, str] | None:

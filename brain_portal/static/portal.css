@@ -34,7 +34,7 @@ button, a { min-height:44px; }
 .skip-link { position: fixed; z-index: 20; top: 12px; left: 12px; padding: 10px 14px; border-radius: 10px; background: var(--portal-ink); color: #fff; transform: translateY(-160%); }
 .skip-link:focus { transform: translateY(0); }
 
-.workspace-shell { width: min(100% - 32px, 1280px); margin: 18px auto; align-items: start; }
+.workspace-shell { width: min(100% - 40px, 1680px); margin: 18px auto; align-items: start; }
 .cloud-rail { display: flex; align-items: center; gap: 18px; padding: 5px 0 13px; border-bottom: 1px solid var(--portal-line); }
 .wordmark, .workspace-brand { display: inline-flex; align-items: center; gap: 9px; min-height: 48px; font-weight: 800; letter-spacing: -.03em; font-size: 1.08rem; }
 .wordmark .portal-icon, .workspace-brand .portal-icon { color: var(--portal-amber-strong); }
@@ -60,7 +60,7 @@ button:active, .primary-action:active { transform: translateY(1px) scale(.99); }
 .tenant-chip { align-self: center; color: var(--portal-muted); font-size: .79rem; white-space: nowrap; }
 .form-status { display: block; min-height: 18px; margin-top: 4px; color: var(--portal-muted); font-size: .76rem; }
 
-.workspace-page { padding: 34px 0 58px; }
+.workspace-page { max-width: 1500px; margin-inline: auto; padding: 34px 0 58px; }
 .workspace-heading, .cloud-workspace-head { display: flex; align-items: end; justify-content: space-between; gap: 22px; padding: 7px 0 26px; }
 .home-hero { display: block; padding-top: 12px; padding-bottom: 32px; }
 .home-hero-copy { max-width: 720px; }
@@ -154,9 +154,23 @@ button:active, .primary-action:active { transform: translateY(1px) scale(.99); }
 .place-preview-actions a { color: var(--portal-blue); }
 
 .page-intro { padding: 7px 0 26px; }
-.search-controls { display: grid; grid-template-columns: minmax(0, 2fr) repeat(4, minmax(110px, 1fr)) auto; gap: 10px; align-items: end; padding: 16px; border: 1px solid var(--portal-line); border-radius: 16px; background: var(--portal-paper); }
+.search-controls { display: grid; gap: 14px; align-items: end; }
+.search-query-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; padding: 18px; border: 1px solid var(--portal-line); border-radius: 16px; background: var(--portal-paper); }
+.search-query-row input { min-height: 56px; font-size: 1rem; }
+.search-query-row button { min-width: 112px; min-height: 56px; }
 .control-field label { display: block; margin: 0 0 6px; color: var(--portal-muted); font-size: .74rem; font-weight: 750; }
-.search-controls .form-status { grid-column: 1 / -1; }
+.filter-bar { display: grid; gap: 14px; padding: 16px 18px; border: 1px solid var(--portal-line); border-radius: 16px; background: rgba(255, 253, 248, .58); }
+.filter-bar-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.filter-bar-head div { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.filter-bar-head strong { font-size: .9rem; }
+.filter-bar-head span { color: var(--portal-muted); font-size: .78rem; }
+.filter-reset { color: var(--portal-blue); font-size: .78rem; font-weight: 750; white-space: nowrap; }
+.filter-reset:hover { text-decoration: underline; text-underline-offset: 3px; }
+.filter-primary, .filter-advanced-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.filter-advanced { border-top: 1px solid var(--portal-line); padding-top: 11px; }
+.filter-advanced summary { cursor: pointer; color: var(--portal-blue); font-size: .8rem; font-weight: 750; }
+.filter-advanced-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); padding-top: 12px; }
+.search-controls .form-status { min-height: 18px; }
 .answer-panel { margin: 0 0 24px; padding: 22px; border-left: 4px solid var(--portal-amber-strong); }
 .answer-panel h2 { margin: 4px 0 8px; }
 .answer-text { max-width: 70ch; margin: 0; font-size: 1.04rem; line-height: 1.7; }
@@ -170,6 +184,10 @@ button:active, .primary-action:active { transform: translateY(1px) scale(.99); }
 .source-card p { margin: 0; color: var(--portal-muted); font-size: .83rem; }
 .source-card-actions { display: flex; gap: 12px; margin-top: auto; font-size: .78rem; }
 .result-section { margin-top: 28px; }
+.search-start-card { padding: 22px; }
+.search-prompts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.search-prompts a { display: inline-flex; align-items: center; min-height: 38px; padding: 7px 11px; border: 1px solid var(--portal-line); border-radius: 999px; background: var(--portal-paper); color: var(--portal-ink); font-size: .8rem; }
+.search-prompts a:hover { border-color: var(--portal-amber-strong); background: var(--portal-amber); }
 
 .breadcrumbs { display: flex; gap: 8px; flex-wrap: wrap; color: var(--portal-muted); font-size: .78rem; }
 .breadcrumbs a { color: var(--portal-blue); }
@@ -208,9 +226,9 @@ button:active, .primary-action:active { transform: translateY(1px) scale(.99); }
   .cloud-tile-grid { gap: 14px; }
 }
 @media (min-width:1080px) {
-  .workspace-shell { gap: 38px; }
-  .workspace-main { max-width: 1020px; }
-  .workspace-topbar { grid-template-columns: minmax(0, 680px) auto; }
+  .workspace-shell { width: min(100% - 64px, 1680px); }
+  .workspace-main { max-width: none; }
+  .workspace-topbar { grid-template-columns: minmax(0, 1fr) auto; }
 }
 @media (max-width: 1040px) {
   .search-controls { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -234,8 +252,11 @@ button:active, .primary-action:active { transform: translateY(1px) scale(.99); }
   .quiet-action, .add { margin-top: 16px; }
   .cloud-tile-grid, .card-grid, .sector-map, .path-list { grid-template-columns: 1fr; }
   .search-controls { grid-template-columns: 1fr; padding: 12px; }
-  .query-field, .cloud-field { grid-column: auto; }
-  .search-controls button { width: 100%; }
+  .search-query-row { grid-template-columns: 1fr; padding: 14px; }
+  .search-query-row button { width: 100%; }
+  .filter-bar { padding: 14px; }
+  .filter-primary, .filter-advanced-grid { grid-template-columns: 1fr; }
+  .filter-bar-head { align-items: flex-start; }
   .sync-card dl { grid-template-columns: 1fr; }
   .place-preview-facts { grid-template-columns: 1fr; }
   .place-preview-head { display: block; }

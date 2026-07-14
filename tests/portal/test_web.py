@@ -263,6 +263,18 @@ def test_warm_token_contract_and_home_card_hierarchy(portal_setup):
     assert 'class="cloud-card"' in html
 
 
+def test_portal_wide_browser_and_search_workbench_contract(portal_setup):
+    client, *_ = portal_setup
+
+    css = client.get("/portal-static/portal.css").get_data(as_text=True)
+    html = client.get("/search").get_data(as_text=True)
+
+    assert "1680px" in css
+    assert "grid-template-columns: minmax(0, 1fr) auto" in css
+    assert 'class="search-query-row"' in html
+    assert 'class="filter-bar"' in html
+
+
 def test_cloud_views_use_domain_specific_data_backed_workspaces(portal_setup):
     client, *_ = portal_setup
 
@@ -581,9 +593,65 @@ def test_blank_search_has_empty_state_and_does_not_call_services(portal_setup):
     html = client.get("/search").get_data(as_text=True)
 
     assert 'id="search-empty-state"' in html
-    assert "描述你想找的內容，系統會保留最接近的原始筆記供你確認。" in html
+    assert "你也可以先選一個入口，系統會保留最接近的原始筆記供你確認。" in html
     assert search.calls == []
     assert answers.calls == []
+
+
+def test_search_controls_separate_primary_query_from_optional_filters(portal_setup):
+    client, *_ = portal_setup
+
+    html = client.get("/search").get_data(as_text=True)
+
+    assert 'class="search-query-row"' in html
+    assert 'class="filter-primary"' in html
+    assert 'class="filter-advanced"' in html
+    assert "更多篩選" in html
+    assert 'href="/search"' in html
+    assert "清除篩選" in html
+
+
+def test_search_filters_work_without_a_query(portal_setup):
+    client, _, _, search, answers = portal_setup
+
+    html = client.get("/search?cloud=food").get_data(as_text=True)
+
+    assert 'id="search-filter-summary"' in html
+    assert "美食地圖" in html
+    assert 'id="search-empty-state"' not in html
+    assert 'data-source-id="food-place"' in html
+    assert 'data-source-id="ai-agent"' not in html
+    assert search.calls == []
+    assert answers.calls == []
+
+
+def test_search_filter_falls_back_to_catalog_when_ranked_hits_miss_scope():
+    repository = FakeRepository()
+    repository.items = [
+        item(
+            "food-place",
+            cloud_key="food",
+            item_type="place",
+            place={"name": "Quiet coffee shop"},
+            summary="A quiet coffee shop for focused work.",
+        ),
+        item("ai-agent", cloud_key="ai", summary="An unrelated automation note."),
+    ]
+
+    def misses_food_scope(tenant_id, query, cloud_key):
+        return SearchResults((SearchHit(repository.items[1], 1.0, ("lexical",)),))
+
+    app = create_app(
+        dependencies=PortalDependencies(
+            repository, TenantResolver(), misses_food_scope, AnswerService(False)
+        )
+    )
+    app.config.update(TESTING=True)
+
+    html = app.test_client().get("/search?q=coffee&cloud=food").get_data(as_text=True)
+
+    assert 'data-source-id="food-place"' in html
+    assert 'data-source-id="ai-agent"' not in html
 
 
 def test_search_error_has_actionable_error_contract():
