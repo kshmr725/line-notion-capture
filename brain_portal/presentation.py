@@ -13,6 +13,7 @@ _H1 = re.compile(r"^#\s+(.+?)\s*$", re.MULTILINE)
 _ALLOWED = {"title", "location", "address", "area", "category", "status"}
 _ALIASES = {"咖啡店": "咖啡廳", "黑膠咖啡": "咖啡廳", "甜點店": "甜點"}
 _CLOUD_ICONS = {"web3": "orbit", "food": "map-pin", "ai": "workflow"}
+_PUBLIC_CLOUD_LABELS = {"web3": "Web3", "food": "美食地圖", "ai": "AI 自動化"}
 _TYPE_ICONS = {
     "research": "file-text",
     "report": "file-text",
@@ -25,10 +26,27 @@ _TYPE_ICONS = {
     "guide": "book",
     "news": "newspaper",
 }
+_PUBLIC_TYPE_LABELS = {
+    "research": "研究筆記",
+    "report": "研究報告",
+    "project": "專案",
+    "concept": "主題",
+    "place": "地點",
+    "tool": "工具",
+    "agent": "Agent",
+    "mcp": "MCP",
+    "workflow": "工作流",
+    "guide": "教學",
+    "news": "新聞",
+}
 
 
 def icon_name_for_cloud(cloud_key: str) -> str:
     return _CLOUD_ICONS.get(cloud_key, "grid")
+
+
+def public_cloud_label(cloud_key: str) -> str:
+    return _PUBLIC_CLOUD_LABELS.get(str(cloud_key).lower(), str(cloud_key))
 
 
 def icon_name_for_item(item: Any) -> str:
@@ -44,12 +62,77 @@ def icon_name_for_item(item: Any) -> str:
     return _TYPE_ICONS.get(str(getattr(item, "item_type", "")).lower(), "file-text")
 
 
+def public_type_label(item_type: str) -> str:
+    return _PUBLIC_TYPE_LABELS.get(str(item_type).lower(), "筆記")
+
+
 def clean_display_text(value: str) -> str:
     """Remove source markup from short reader-facing labels and summaries."""
     text = unescape(str(value or ""))
     text = re.sub(r"<[^>]+>", " ", text)
     text = re.sub(r"[*_~`]+", "", text)
     return re.sub(r"\s+", " ", text).strip()
+
+
+_PLACE_FACT_PATTERNS = (
+    ("評價", r"(?:⭐\s*)?(?:\*\*)?評價(?:\*\*)?\s*[:：]\s*(.*?)(?=\s*(?:📍|地址|🕒|時間|💰|價位[／/]特色|$))"),
+    ("地址", r"(?:📍\s*)?(?:\*\*)?地址(?:\*\*)?\s*[:：]\s*(.*?)(?=\s*(?:⭐|評價|🕒|時間|💰|價位[／/]特色|$))"),
+    ("營業時間", r"(?:🕒\s*)?(?:\*\*)?(?:時間|營業時間)(?:\*\*)?\s*[:：]\s*(.*?)(?=\s*(?:⭐|評價|📍|地址|💰|價位[／/]特色|$))"),
+    ("價位／特色", r"(?:💰\s*)?(?:\*\*)?價位[／/]特色(?:\*\*)?\s*[:：]\s*(.*?)(?=\s*(?:⭐|評價|📍|地址|🕒|時間|#|📌|💡|⚡|🗺️|$))"),
+)
+_PLACE_KEY_LABELS = (
+    ("rating", "評價"),
+    ("address", "地址"),
+    ("area", "區域"),
+    ("opening_hours", "營業時間"),
+    ("hours", "營業時間"),
+    ("time", "營業時間"),
+    ("price", "價位／特色"),
+    ("price_range", "價位／特色"),
+    ("features", "特色"),
+    ("highlights", "特色"),
+)
+
+
+def place_facts(
+    place: dict[str, object] | None,
+    summary: str = "",
+    body: str = "",
+) -> list[dict[str, str]]:
+    """Return only reader-useful facts for a food/place card.
+
+    Coordinates remain available to the map layer, but are intentionally not
+    part of this public presentation contract.
+    """
+    if not place:
+        return []
+    facts: list[dict[str, str]] = []
+    seen: set[str] = set()
+
+    def add(label: str, value: object) -> None:
+        if value is None:
+            return
+        cleaned = clean_display_text(str(value))
+        if not cleaned or label in seen:
+            return
+        seen.add(label)
+        facts.append({"label": label, "value": cleaned})
+
+    add("類型", place.get("category"))
+    for key, label in _PLACE_KEY_LABELS:
+        add(label, place.get(key))
+
+    for source in (summary, body):
+        source_text = clean_display_text(source)
+        if not source_text:
+            continue
+        for label, pattern in _PLACE_FACT_PATTERNS:
+            if label in seen:
+                continue
+            match = re.search(pattern, source_text, flags=re.IGNORECASE)
+            if match:
+                add(label, match.group(1).strip(" \t\r\n。"))
+    return facts
 
 def clean_display_title(value: str) -> str:
     value = _DATE_PREFIX.sub("", value.strip())

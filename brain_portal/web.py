@@ -17,7 +17,14 @@ from brain_portal.models import (
     TenantContext,
 )
 from brain_portal.answers import QUERY_LIMIT
-from brain_portal.presentation import clean_display_text, icon_name_for_cloud, icon_name_for_item
+from brain_portal.presentation import (
+    clean_display_text,
+    icon_name_for_cloud,
+    icon_name_for_item,
+    place_facts,
+    public_cloud_label,
+    public_type_label,
+)
 from brain_portal.search import SearchResults
 
 
@@ -64,6 +71,7 @@ CLOUDS = (
         "icon_name": "orbit",
         "description": "賽道、專案與概念 Wiki。",
         "filters": ("Sector", "Project", "Thesis", "Status"),
+        "filter_labels": ("賽道總覽", "找專案", "讀研究", "看狀態"),
         "paths": ("Review an active thesis", "Compare adjacent projects"),
     },
     {
@@ -73,6 +81,7 @@ CLOUDS = (
         "icon_name": "map-pin",
         "description": "地點、想去清單與使用情境。",
         "filters": ("Area", "Category", "Visit status", "Use case"),
+        "filter_labels": ("附近想去", "按類型找", "已去過", "按區域找"),
         "paths": ("Find a quiet dinner", "Plan by neighborhood"),
     },
     {
@@ -82,6 +91,7 @@ CLOUDS = (
         "icon_name": "workflow",
         "description": "工具、Agent 與可重用的工作流。",
         "filters": ("Tool", "Agent", "MCP", "Workflow", "Reliability"),
+        "filter_labels": ("找工具", "找 Agent", "找 MCP", "重用工作流", "看穩定性"),
         "paths": ("Build reliable agents", "Connect tools with MCP"),
     },
 )
@@ -155,6 +165,9 @@ def create_portal_blueprint(dependencies: PortalDependencies) -> Blueprint:
             "freshness": freshness,
             "place_filter": place_filter,
             "types": sorted({item.item_type for item in items}),
+            "type_labels": {
+                item.item_type: public_type_label(item.item_type) for item in items
+            },
             "concepts": sorted({value for item in items for value in item.concepts}),
         }
         status = 200
@@ -209,10 +222,12 @@ def create_portal_blueprint(dependencies: PortalDependencies) -> Blueprint:
         cloud_view = dict(cloud_definition)
         cloud_view["filters"] = [
             {
-                "label": label,
-                "url": url_for("portal.search", q=label, cloud=key),
+                "label": display_label,
+                "url": url_for("portal.search", q=display_label, cloud=key),
             }
-            for label in cloud_definition["filters"]
+            for display_label in cloud_definition.get(
+                "filter_labels", cloud_definition["filters"]
+            )
         ]
         concepts = sorted({concept for item in items for concept in item.concepts})
         available_clouds = {item.cloud_key for item in all_items if item.cloud_key != key}
@@ -326,16 +341,20 @@ def _tenant_view() -> dict[str, str]:
 
 
 def _item_card(item: KnowledgeItem) -> dict[str, object]:
+    facts = place_facts(item.place, item.summary, item.body)
     return {
         "source_id": item.source_id,
         "title": item.title,
         "summary": clean_display_text(item.summary),
         "cloud_key": item.cloud_key,
+        "cloud_label": public_cloud_label(item.cloud_key),
         "item_type": item.item_type,
+        "item_type_label": public_type_label(item.item_type),
         "icon_name": icon_name_for_item(item),
         "updated_at": item.updated_at,
         "concepts": item.concepts,
         "place": item.place,
+        "place_facts": facts,
         "has_coordinates": _place_has_coordinates(item.place),
         "url": url_for("portal.item_detail", source_id=item.source_id),
         "place_url": (
@@ -352,6 +371,7 @@ def _item_detail(item: KnowledgeItem) -> dict[str, object]:
         body=item.body,
         concepts=item.concepts,
         place=item.place,
+        place_facts=place_facts(item.place, item.summary, item.body),
         canonical_action=_canonical_action(item),
         reading_time=max(1, math.ceil(len(re.findall(r"\w+", item.body)) / 200)),
         confidence="Source-backed",
@@ -510,12 +530,13 @@ def _cloud_workspace(
     items: list[KnowledgeItem], key: str, all_items: list[KnowledgeItem]
 ) -> dict[str, object]:
     definition = next(cloud for cloud in CLOUDS if cloud["key"] == key)
+    filter_labels = definition.get("filter_labels", definition["filters"])
     tabs = [
         {
-            "label": label,
-            "url": url_for("portal.search", q=label, cloud=key),
+            "label": display_label,
+            "url": url_for("portal.search", q=display_label, cloud=key),
         }
-        for label in definition["filters"]
+        for display_label in filter_labels
     ]
     concepts = sorted({concept for item in items for concept in item.concepts})
     concept_counts = [

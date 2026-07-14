@@ -30,6 +30,7 @@ def item(
     concepts: tuple[str, ...] = ("agents", "reliability"),
     updated_at: str = "2026-07-13T10:30:00+00:00",
     body: str = "Evidence, observations, and practical next steps.",
+    summary: str = "A source-backed summary for this note.",
 ) -> KnowledgeItem:
     return KnowledgeItem(
         tenant_id=tenant_id,
@@ -42,7 +43,7 @@ def item(
             "notion-page": "Shared workflow",
             "food-place": "Quiet noodle shop",
         }.get(source_id, "Private note"),
-        summary="A source-backed summary for this note.",
+        summary=summary,
         body=body,
         cloud_key=cloud_key,
         item_type=item_type,
@@ -193,11 +194,11 @@ def test_cloud_views_use_domain_specific_data_backed_workspaces(portal_setup):
     ai_html = client.get("/cloud/ai").get_data(as_text=True)
 
     assert 'id="sector-map"' in web3_html
-    assert 'href="/search?q=Sector&amp;cloud=web3"' in web3_html
+    assert 'href="/search?q=%E8%B3%BD%E9%81%93%E7%B8%BD%E8%A6%BD&amp;cloud=web3"' in web3_html
     assert 'id="food-discovery"' in food_html
     assert "地圖資料不足，改以清單瀏覽" in food_html
     assert 'id="ai-workspace"' in ai_html
-    assert "Workflow" in ai_html
+    assert "重用工作流" in ai_html
 
 
 def test_cloud_workspaces_use_semantic_svg_item_icons(portal_setup):
@@ -275,6 +276,70 @@ def test_food_map_loads_leaflet_and_has_keyboard_selectable_place_rows():
     assert 'data-place-source-id="mapped-food"' in html
     assert "height:clamp(360px,52vh,560px)" in css
     assert 'querySelectorAll(".map-marker")' in javascript
+    assert "scrollWheelZoom: true" in javascript
+
+
+def test_food_map_has_reader_preview_contract_for_selected_place(portal_setup):
+    repository = FakeRepository()
+    repository.items = [
+        item(
+            "mapped-food",
+            cloud_key="food",
+            item_type="place",
+            place={"name": "Mapped cafe", "latitude": 25.03, "longitude": 121.54},
+        )
+    ]
+    app = create_app(
+        dependencies=PortalDependencies(
+            repository, TenantResolver(), SearchService(), AnswerService(False)
+        )
+    )
+    app.config.update(TESTING=True)
+    client = app.test_client()
+
+    html = client.get("/cloud/food").get_data(as_text=True)
+    javascript = client.get("/portal-static/portal.js").get_data(as_text=True)
+
+    assert 'id="place-preview"' in html
+    assert "點地圖上的地標" in html
+    assert "renderPlacePreview" in javascript
+    assert "place-preview" in javascript
+
+
+def test_place_detail_card_prefers_reader_facts_and_hides_coordinates():
+    repository = FakeRepository()
+    repository.items = [
+        item(
+            "coffee-place",
+            cloud_key="food",
+            item_type="place",
+            place={
+                "name": "咖啡煙（無預約服務）",
+                "category": "咖啡廳",
+                "latitude": 24.0772181,
+                "longitude": 120.5390055,
+            },
+            summary=(
+                "⭐ 評價：4.7（Google Maps，643 則） 📍 地址：彰化市永樂街199號 "
+                "🕒 時間：13:30–22:00（週四公休） 💰 價位/特色：$200–400／老屋咖啡、甜點、無預約服務"
+            ),
+        )
+    ]
+    app = create_app(
+        dependencies=PortalDependencies(
+            repository, TenantResolver(), SearchService(), AnswerService(False)
+        )
+    )
+    app.config.update(TESTING=True)
+
+    html = app.test_client().get("/place/coffee-place").get_data(as_text=True)
+
+    assert "評價" in html and "4.7" in html
+    assert "彰化市永樂街199號" in html
+    assert "13:30–22:00" in html
+    assert "$200–400" in html and "老屋咖啡" in html
+    assert "Latitude" not in html and "Longitude" not in html
+    assert "24.0772181" not in html and "120.5390055" not in html
 
 
 def test_reader_cards_strip_source_markup_from_summaries():
@@ -297,6 +362,31 @@ def test_reader_cards_strip_source_markup_from_summaries():
     assert "Useful summary with a line" in html
     assert "<br>" not in html
     assert "**summary**" not in html
+
+
+def test_workspace_navigation_uses_task_language_instead_of_schema_terms(portal_setup):
+    client, *_ = portal_setup
+
+    home = client.get("/").get_data(as_text=True)
+    web3 = client.get("/cloud/web3").get_data(as_text=True)
+    food = client.get("/cloud/food").get_data(as_text=True)
+    ai = client.get("/cloud/ai").get_data(as_text=True)
+
+    assert 'data-nav-group="clouds"' in home
+    assert "賽道總覽" in web3 and "找專案" in web3 and "讀研究" in web3
+    assert "附近想去" in food and "按區域找" in food
+    assert "找工具" in ai and "重用工作流" in ai
+    assert "Sector" not in web3 and "Project" not in web3 and "Thesis" not in web3
+    assert 'id="related-concepts"' not in web3
+
+
+def test_public_item_labels_hide_internal_type_keys(portal_setup):
+    client, *_ = portal_setup
+
+    html = client.get("/cloud/ai").get_data(as_text=True)
+
+    assert "研究筆記" in html
+    assert "research ·" not in html
 
 
 def test_all_routes_resolve_the_mandatory_tenant(portal_setup):
@@ -436,8 +526,8 @@ def test_cloud_has_domain_filters_and_featured_paths(portal_setup):
     html = client.get("/cloud/ai").get_data(as_text=True)
 
     assert 'id="cloud-filters"' in html
-    assert "Tool" in html
-    assert "Workflow" in html
+    assert "找工具" in html
+    assert "重用工作流" in html
     assert 'id="featured-paths"' in html
     assert "Build reliable agents" in html
     assert 'data-source-id="ai-agent"' in html
@@ -720,7 +810,7 @@ def test_cloud_filters_are_real_search_links_and_javascript_has_no_dead_toggle(p
     javascript = client.get("/portal-static/portal.js").get_data(as_text=True)
 
     assert '<a class="filter-pill"' in html
-    assert 'href="/search?q=Tool&amp;cloud=ai"' in html
+    assert 'href="/search?q=%E6%89%BE%E5%B7%A5%E5%85%B7&amp;cloud=ai"' in html
     assert "data-filter" not in html
     assert "[data-filter]" not in javascript
     assert 'setAttribute("aria-pressed"' not in javascript

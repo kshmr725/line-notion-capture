@@ -20,7 +20,7 @@
     if (!Array.isArray(points) || !points.length || !window.L) return;
 
     element.querySelectorAll(".map-marker").forEach((marker) => marker.remove());
-    const map = window.L.map(element, { scrollWheelZoom: false, zoomControl: true });
+    const map = window.L.map(element, { scrollWheelZoom: true, zoomControl: true });
     window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
@@ -35,10 +35,62 @@
     });
     const bounds = [];
 
+    function renderPlacePreview(item) {
+      const preview = document.querySelector("#place-preview");
+      if (!preview || !item) return;
+      preview.replaceChildren();
+
+      const heading = document.createElement("div");
+      heading.className = "place-preview-head";
+      const title = document.createElement("h3");
+      title.id = "place-preview-title";
+      title.textContent = item.place?.name || item.title || "收藏地點";
+      heading.appendChild(title);
+      const category = item.place?.category || "地點";
+      const categoryText = document.createElement("span");
+      categoryText.textContent = category;
+      heading.appendChild(categoryText);
+      preview.appendChild(heading);
+
+      const facts = Array.isArray(item.place_facts) ? item.place_facts : [];
+      if (facts.length) {
+        const list = document.createElement("dl");
+        list.className = "place-preview-facts";
+        facts.forEach((fact) => {
+          if (!fact || !fact.label || !fact.value) return;
+          const row = document.createElement("div");
+          const label = document.createElement("dt");
+          label.textContent = fact.label;
+          const value = document.createElement("dd");
+          value.textContent = fact.value;
+          row.append(label, value);
+          list.appendChild(row);
+        });
+        preview.appendChild(list);
+      } else {
+        const empty = document.createElement("p");
+        empty.className = "place-preview-empty-copy";
+        empty.textContent = "這筆地點目前還沒有補上評價、地址或營業資訊。";
+        preview.appendChild(empty);
+      }
+
+      const actions = document.createElement("div");
+      actions.className = "place-preview-actions";
+      if (item.place_url || item.url) {
+        const detail = document.createElement("a");
+        detail.href = item.place_url || item.url;
+        detail.textContent = "查看完整地點";
+        actions.appendChild(detail);
+      }
+      if (actions.childElementCount) preview.appendChild(actions);
+    }
+
     const selectSource = (sourceId, focusList) => {
       document.querySelectorAll("[data-place-source-id]").forEach((row) => {
         row.classList.toggle("is-selected", row.dataset.placeSourceId === sourceId);
       });
+      const selected = points.find((point) => point.item?.source_id === sourceId);
+      if (selected) renderPlacePreview(selected.item || {});
       markers.forEach((marker, key) => {
         const node = marker.getElement();
         if (node) node.classList.toggle("is-selected", key === sourceId);

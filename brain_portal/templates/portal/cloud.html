@@ -22,7 +22,7 @@
   {% elif cloud.key == 'food' %}
   <section id="food-discovery" class="domain-grid food-grid" aria-labelledby="food-title">
     <div class="food-panel"><div class="section-head"><h2 id="food-title">美食探索</h2><span>{{ workspace.coordinate_count }} 可定位 / {{ workspace.unlocated_count }} 待補位置</span></div>
-      {% if workspace.has_coordinates %}<div id="food-map" class="real-map" data-map-points='{{ workspace.map_points|tojson }}' aria-label="以已儲存座標呈現的收藏地點地圖">{% for point in workspace.map_points %}<a class="map-marker" data-source-id="{{ point.item.source_id }}" data-latitude="{{ point.latitude }}" data-longitude="{{ point.longitude }}" href="{{ point.item.place_url or point.item.url }}" aria-label="開啟 {{ point.item.place.name or point.item.title }}">{{ loop.index }}</a>{% endfor %}</div>{% else %}<p class="map-fallback">地圖資料不足，改以清單瀏覽。</p>{% endif %}
+      {% if workspace.has_coordinates %}<div id="food-map" class="real-map" data-map-points='{{ workspace.map_points|tojson }}' aria-label="以已儲存座標呈現的收藏地點地圖">{% for point in workspace.map_points %}<a class="map-marker" data-source-id="{{ point.item.source_id }}" data-latitude="{{ point.latitude }}" data-longitude="{{ point.longitude }}" href="{{ point.item.place_url or point.item.url }}" aria-label="開啟 {{ point.item.place.name or point.item.title }}">{{ loop.index }}</a>{% endfor %}</div><section id="place-preview" class="place-preview" aria-live="polite" aria-labelledby="place-preview-title"><div class="place-preview-empty"><strong id="place-preview-title">選一個地標看資訊</strong><p>點地圖上的地標，這裡會顯示評價、地址、時間和特色。</p></div></section>{% else %}<p class="map-fallback">地圖資料不足，改以清單瀏覽。</p>{% endif %}
     </div>
     <div class="workspace-section"><div class="section-head"><h2>附近想去</h2><span>依已儲存資料</span></div>
       <div class="continue-list place-list">{% for item in workspace.places %}<a class="continue-row" data-source-id="{{ item.source_id }}" data-place-source-id="{{ item.source_id }}" href="{{ item.place_url or item.url }}"><span class="row-icon">{{ icon(item.icon_name) }}</span><span class="row-content"><strong>{{ item.place.name or item.title }}</strong><small>{% if item.has_coordinates %}{{ item.place.area or item.place.category or '已定位' }}{% else %}待補位置{% endif %}</small></span><span class="cloud-badge cloud-food">地點</span></a>{% else %}<p class="empty-inline">尚未有含地點資料的筆記。</p>{% endfor %}</div>
@@ -31,14 +31,14 @@
   {% else %}
   <section id="ai-workspace" class="domain-grid ai-grid" aria-labelledby="ai-title">
     <div class="workspace-section"><div class="section-head"><h2 id="ai-title">可重用的方法</h2><span>{{ workspace.item_count }} 筆</span></div>
-      <div class="continue-list">{% for item in workspace.recent %}<a class="continue-row" data-source-id="{{ item.source_id }}" href="{{ item.url }}"><span class="row-icon">{{ icon(item.icon_name) }}</span><span class="row-content"><strong>{{ item.title }}</strong><small>{{ item.item_type }} · {{ item.summary }}</small></span><span class="cloud-badge cloud-ai">{{ item.item_type }}</span></a>{% else %}<p class="empty-inline">尚未索引 AI 自動化筆記。</p>{% endfor %}</div>
+      <div class="continue-list">{% for item in workspace.recent %}<a class="continue-row" data-source-id="{{ item.source_id }}" href="{{ item.url }}"><span class="row-icon">{{ icon(item.icon_name) }}</span><span class="row-content"><strong>{{ item.title }}</strong><small>{{ item.item_type_label }} · {{ item.summary }}</small></span><span class="cloud-badge cloud-ai">{{ item.item_type_label }}</span></a>{% else %}<p class="empty-inline">尚未索引 AI 自動化筆記。</p>{% endfor %}</div>
     </div>
     <aside class="workspace-section ai-guide"><h2>如何使用</h2><p>先從工具、Agent、MCP 或 Workflow 進入，再用搜尋把相關概念串起來。</p></aside>
   </section>
   {% endif %}
 
   {% if workspace.concepts %}
-  <section id="related-concepts" class="workspace-section" aria-labelledby="concept-title"><div class="section-head"><h2 id="concept-title">相關概念</h2><span>跨 Cloud Wiki 關聯</span></div><div class="concept-row">{% for concept in workspace.concepts %}<a href="{{ concept.url }}">{{ concept.label }}</a>{% endfor %}</div></section>
+  <section id="related-concepts" class="workspace-section" aria-labelledby="concept-title"><div class="section-head"><h2 id="concept-title">延伸主題</h2><span>跨 Cloud 一起看</span></div><div class="concept-row">{% for concept in workspace.concepts %}<a href="{{ concept.url }}">{{ concept.label }}</a>{% endfor %}</div></section>
   {% endif %}
 
   <section id="featured-paths" class="workspace-section" aria-labelledby="path-title"><div class="section-head"><h2 id="path-title">開始探索</h2><span>實際搜尋入口</span></div><div class="path-list">{% for path in cloud.paths %}<a href="{{ url_for('portal.search', q=path, cloud=cloud.key) }}"><strong>{{ path }}</strong><span aria-hidden="true">→</span></a>{% endfor %}</div></section>
