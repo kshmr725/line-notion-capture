@@ -19,6 +19,7 @@
     }
     if (!Array.isArray(points) || !points.length || !window.L) return;
 
+    element.querySelectorAll(".map-marker").forEach((marker) => marker.remove());
     const map = window.L.map(element, { scrollWheelZoom: false, zoomControl: true });
     window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,

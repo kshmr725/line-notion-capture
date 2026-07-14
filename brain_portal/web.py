@@ -17,7 +17,7 @@ from brain_portal.models import (
     TenantContext,
 )
 from brain_portal.answers import QUERY_LIMIT
-from brain_portal.presentation import icon_name_for_cloud, icon_name_for_item
+from brain_portal.presentation import clean_display_text, icon_name_for_cloud, icon_name_for_item
 from brain_portal.search import SearchResults
 
 
@@ -329,7 +329,7 @@ def _item_card(item: KnowledgeItem) -> dict[str, object]:
     return {
         "source_id": item.source_id,
         "title": item.title,
-        "summary": item.summary,
+        "summary": clean_display_text(item.summary),
         "cloud_key": item.cloud_key,
         "item_type": item.item_type,
         "icon_name": icon_name_for_item(item),
@@ -385,8 +385,8 @@ def _breadcrumbs(item: KnowledgeItem) -> list[dict[str, str | None]]:
 
 
 def _takeaways(item: KnowledgeItem) -> list[str]:
-    values = [item.summary.strip()]
-    values.extend(part.strip() for part in item.body.split("\n\n") if part.strip())
+    values = [clean_display_text(item.summary)]
+    values.extend(clean_display_text(part) for part in item.body.split("\n\n") if part.strip())
     return list(dict.fromkeys(value[:280] for value in values if value))[:3]
 
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import re
+from html import unescape
 from typing import Any
 
 import yaml
@@ -41,6 +42,14 @@ def icon_name_for_item(item: Any) -> str:
             return "cake"
         return "utensils"
     return _TYPE_ICONS.get(str(getattr(item, "item_type", "")).lower(), "file-text")
+
+
+def clean_display_text(value: str) -> str:
+    """Remove source markup from short reader-facing labels and summaries."""
+    text = unescape(str(value or ""))
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"[*_~`]+", "", text)
+    return re.sub(r"\s+", " ", text).strip()
 
 def clean_display_title(value: str) -> str:
     value = _DATE_PREFIX.sub("", value.strip())

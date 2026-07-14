@@ -266,12 +266,37 @@ def test_food_map_loads_leaflet_and_has_keyboard_selectable_place_rows():
 
     html = client.get("/cloud/food").get_data(as_text=True)
     javascript = client.get("/portal-static/portal.js").get_data(as_text=True)
+    css = client.get("/portal-static/portal.css").get_data(as_text=True)
 
     assert "leaflet.css" in html
     assert "unpkg.com/leaflet@1.9.4" in html
     assert "initFoodMap" in javascript
     assert "brain-cloud:place-selected" in javascript
     assert 'data-place-source-id="mapped-food"' in html
+    assert "height:clamp(360px,52vh,560px)" in css
+    assert 'querySelectorAll(".map-marker")' in javascript
+
+
+def test_reader_cards_strip_source_markup_from_summaries():
+    repository = FakeRepository()
+    repository.items = [
+        item("markup", body="**Evidence**", cloud_key="ai")
+    ]
+    repository.items[0] = KnowledgeItem(
+        **{**repository.items[0].__dict__, "summary": "Useful **summary**<br>with a line"}
+    )
+    app = create_app(
+        dependencies=PortalDependencies(
+            repository, TenantResolver(), SearchService(), AnswerService(False)
+        )
+    )
+    app.config.update(TESTING=True)
+
+    html = app.test_client().get("/").get_data(as_text=True)
+
+    assert "Useful summary with a line" in html
+    assert "<br>" not in html
+    assert "**summary**" not in html
 
 
 def test_all_routes_resolve_the_mandatory_tenant(portal_setup):

@@ -91,6 +91,7 @@ button:active, .primary-action:active { transform: translateY(1px) scale(.99); }
 .row-content { display: grid; gap: 2px; min-width: 0; }
 .row-content strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row-content small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--portal-muted); font-size: .76rem; }
+.tile-preview, .row-content strong, .row-content small { min-width: 0; overflow-wrap: anywhere; white-space: normal; }
 .cloud-badge { padding: 4px 7px; border-radius: 5px; background: var(--portal-blue-soft); color: #246ab3; font-size: .69rem; white-space: nowrap; }
 .state-card, .answer-panel, .item-metadata, .place-sheet, .ai-guide, .status-strip { border: 1px solid var(--portal-line); border-radius: 15px; background: var(--portal-paper); }
 .state-card { padding: 22px; }
@@ -120,7 +121,7 @@ button:active, .primary-action:active { transform: translateY(1px) scale(.99); }
 
 .food-grid { grid-template-columns: minmax(0, 1.2fr) minmax(0, .8fr); align-items: start; }
 .food-panel { min-width: 0; }
-.real-map { position: relative; min-height: 390px; overflow: hidden; border: 1px solid var(--portal-line); border-radius: 16px; background: #e7e5de; }
+.real-map { position: relative; height:clamp(360px,52vh,560px); min-height: 390px; overflow: hidden; border: 1px solid var(--portal-line); border-radius: 16px; background: #e7e5de; }
 .real-map::before { content: "OpenStreetMap"; position: absolute; right: 8px; bottom: 6px; z-index: 1; padding: 2px 5px; background: rgba(255, 253, 248, .85); color: var(--portal-muted); font-size: .68rem; }
 .real-map[data-map-ready="true"] { background: var(--portal-paper); }
 .portal-map-pin { width: 24px !important; height: 24px !important; border: 0; background: transparent; }
