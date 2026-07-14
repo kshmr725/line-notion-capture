@@ -761,6 +761,8 @@ def test_connect_source_submit_builds_a_proposal_and_advances_onboarding(
     onboarding_html = client.get("/onboarding").get_data(as_text=True)
     assert "Restaking Thesis" in onboarding_html
     assert "Untagged Note" in onboarding_html
+    assert "確認你的分類" in onboarding_html
+    assert "正在建立你的 Brain Cloud" not in onboarding_html
 
 
 def test_confirm_onboarding_indexes_the_proposed_items(

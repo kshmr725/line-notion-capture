@@ -263,7 +263,7 @@ def create_auth_blueprint(
 
 _ONBOARDING_LABELS = {
     "needs_source": "準備中",
-    "proposed": "正在建立你的 Brain Cloud",
+    "proposed": "確認你的分類",
     "confirmed": "正在建立你的 Brain Cloud",
     "indexing": "正在建立你的 Brain Cloud",
     "ready": "已是最新",
