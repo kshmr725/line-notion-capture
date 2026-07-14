@@ -171,6 +171,20 @@ def test_home_uses_semantic_svg_cloud_icons_and_real_previews(portal_setup):
     assert "研究一個主題" in html
 
 
+def test_warm_token_contract_and_home_card_hierarchy(portal_setup):
+    client, *_ = portal_setup
+
+    html = client.get("/").get_data(as_text=True)
+    css = client.get("/portal-static/portal.css").get_data(as_text=True).lower()
+
+    assert "--portal-canvas: #f4f2ed" in css
+    assert "--portal-amber-strong: #c67025" in css
+    assert "--portal-blue: #2f8cff" in css
+    assert "#2f7168" not in css
+    assert 'class="intent-link"' in html
+    assert 'class="cloud-card"' in html
+
+
 def test_cloud_views_use_domain_specific_data_backed_workspaces(portal_setup):
     client, *_ = portal_setup
 
@@ -184,6 +198,20 @@ def test_cloud_views_use_domain_specific_data_backed_workspaces(portal_setup):
     assert "地圖資料不足，改以清單瀏覽" in food_html
     assert 'id="ai-workspace"' in ai_html
     assert "Workflow" in ai_html
+
+
+def test_cloud_workspaces_use_semantic_svg_item_icons(portal_setup):
+    client, *_ = portal_setup
+
+    html = "".join(
+        client.get(path).get_data(as_text=True)
+        for path in ("/cloud/web3", "/cloud/food", "/cloud/ai")
+    )
+
+    assert 'data-icon="file-text"' in html
+    assert 'data-icon="utensils"' in html
+    assert 'data-icon="workflow"' in html
+    assert "◌" not in html and "⌖" not in html and "✦" not in html
 
 
 def test_all_routes_resolve_the_mandatory_tenant(portal_setup):

@@ -10,7 +10,7 @@
     <div class="section-head"><h2 id="cloud-title">我的 Cloud</h2><span>依內容類型快速進入</span></div>
     <div class="cloud-tile-grid">
       {% for cloud in clouds %}
-      <a class="cloud-card cloud-{{ cloud.key }}" data-cloud-key="{{ cloud.key }}" href="{{ cloud.url }}">
+      <a class="cloud-card" data-cloud-key="{{ cloud.key }}" href="{{ cloud.url }}">
         <span class="tile-title">{{ icon(cloud.icon_name) }}<strong>{{ cloud.name }}</strong></span>
         <span class="tile-copy">{{ cloud.description }}</span>
         {% if cloud.preview_titles %}<span class="tile-preview">{{ cloud.preview_titles|join(' · ') }}</span>{% endif %}

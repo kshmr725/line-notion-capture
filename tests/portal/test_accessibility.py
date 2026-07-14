@@ -127,7 +127,10 @@ def test_css_encodes_focus_touch_responsive_and_reduced_motion_contracts(accessi
     assert "@media (min-width:760px)" in css
     assert "@media (min-width:1080px)" in css
     assert "prefers-reduced-motion:reduce" in css
-    assert "#2f7168" in css
+    assert "--portal-canvas: #f4f2ed" in css.lower()
+    assert "--portal-amber-strong: #c67025" in css.lower()
+    assert "--portal-blue: #2f8cff" in css.lower()
+    assert "#2f7168" not in css.lower()
     assert "gradient" not in css.lower()
 
 

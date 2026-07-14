@@ -1,4 +1,5 @@
 {% extends "portal/base.html" %}
+{% from "portal/_icons.html" import icon %}
 {% block content %}
 <div class="workspace-page cloud-workspace cloud-{{ cloud.key }}">
   <header class="cloud-workspace-head">
@@ -15,7 +16,7 @@
       <div id="sector-map" class="sector-map">{% for concept in workspace.concepts %}<a href="{{ concept.url }}"><strong>{{ concept.label }}</strong><small>{{ concept.count }} 筆</small></a>{% else %}<p class="empty-inline">尚未有足夠的研究資料建立賽道地圖。</p>{% endfor %}</div>
     </section>
     <section class="workspace-section" aria-labelledby="latest-title"><div class="section-head"><h2 id="latest-title">最新研究</h2><span>{{ workspace.item_count }} 筆</span></div>
-      <div class="continue-list">{% for item in workspace.recent %}<a class="continue-row" data-source-id="{{ item.source_id }}" href="{{ item.url }}"><span class="row-icon" aria-hidden="true">◌</span><span class="row-content"><strong>{{ item.title }}</strong><small>{{ item.summary }}</small></span><span>{{ item.updated_at[:10] }}</span></a>{% else %}<p class="empty-inline">尚未索引 Web3 研究。</p>{% endfor %}</div>
+      <div class="continue-list">{% for item in workspace.recent %}<a class="continue-row" data-source-id="{{ item.source_id }}" href="{{ item.url }}"><span class="row-icon">{{ icon(item.icon_name) }}</span><span class="row-content"><strong>{{ item.title }}</strong><small>{{ item.summary }}</small></span><span>{{ item.updated_at[:10] }}</span></a>{% else %}<p class="empty-inline">尚未索引 Web3 研究。</p>{% endfor %}</div>
     </section>
   </div>
   {% elif cloud.key == 'food' %}
@@ -24,13 +25,13 @@
       {% if workspace.has_coordinates %}<div id="food-map" class="real-map" aria-label="以已儲存座標呈現的收藏地點地圖">{% for point in workspace.map_points %}<a class="map-marker" data-source-id="{{ point.item.source_id }}" data-latitude="{{ point.latitude }}" data-longitude="{{ point.longitude }}" href="{{ point.item.place_url or point.item.url }}" aria-label="開啟 {{ point.item.place.name or point.item.title }}">{{ loop.index }}</a>{% endfor %}</div>{% else %}<p class="map-fallback">地圖資料不足，改以清單瀏覽。</p>{% endif %}
     </div>
     <div class="workspace-section"><div class="section-head"><h2>附近想去</h2><span>依已儲存資料</span></div>
-      <div class="continue-list">{% for item in workspace.places %}<a class="continue-row" data-source-id="{{ item.source_id }}" href="{{ item.place_url or item.url }}"><span class="row-icon" aria-hidden="true">⌖</span><span class="row-content"><strong>{{ item.place.name or item.title }}</strong><small>{{ item.place.area or item.place.category or '未分類地點' }}</small></span><span class="cloud-badge cloud-food">地點</span></a>{% else %}<p class="empty-inline">尚未有含地點資料的筆記。</p>{% endfor %}</div>
+      <div class="continue-list place-list">{% for item in workspace.places %}<a class="continue-row" data-source-id="{{ item.source_id }}" data-place-source-id="{{ item.source_id }}" href="{{ item.place_url or item.url }}"><span class="row-icon">{{ icon(item.icon_name) }}</span><span class="row-content"><strong>{{ item.place.name or item.title }}</strong><small>{{ item.place.area or item.place.category or '待補位置' }}</small></span><span class="cloud-badge cloud-food">地點</span></a>{% else %}<p class="empty-inline">尚未有含地點資料的筆記。</p>{% endfor %}</div>
     </div>
   </section>
   {% else %}
   <section id="ai-workspace" class="domain-grid ai-grid" aria-labelledby="ai-title">
     <div class="workspace-section"><div class="section-head"><h2 id="ai-title">可重用的方法</h2><span>{{ workspace.item_count }} 筆</span></div>
-      <div class="continue-list">{% for item in workspace.recent %}<a class="continue-row" data-source-id="{{ item.source_id }}" href="{{ item.url }}"><span class="row-icon" aria-hidden="true">✦</span><span class="row-content"><strong>{{ item.title }}</strong><small>{{ item.item_type }} · {{ item.summary }}</small></span><span class="cloud-badge cloud-ai">{{ item.item_type }}</span></a>{% else %}<p class="empty-inline">尚未索引 AI 自動化筆記。</p>{% endfor %}</div>
+      <div class="continue-list">{% for item in workspace.recent %}<a class="continue-row" data-source-id="{{ item.source_id }}" href="{{ item.url }}"><span class="row-icon">{{ icon(item.icon_name) }}</span><span class="row-content"><strong>{{ item.title }}</strong><small>{{ item.item_type }} · {{ item.summary }}</small></span><span class="cloud-badge cloud-ai">{{ item.item_type }}</span></a>{% else %}<p class="empty-inline">尚未索引 AI 自動化筆記。</p>{% endfor %}</div>
     </div>
     <aside class="workspace-section ai-guide"><h2>如何使用</h2><p>先從工具、Agent、MCP 或 Workflow 進入，再用搜尋把相關概念串起來。</p></aside>
   </section>
