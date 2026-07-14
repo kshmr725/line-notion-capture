@@ -148,3 +148,36 @@ def test_wordmark_and_card_primary_links_have_touch_target_contract(accessible_c
     assert ".wordmark," in css
     assert ".source-card h3 a" in css
     assert "min-height:44px" in css
+
+
+@pytest.mark.parametrize("path", ["/views/new?cloud=ai", "/views/table?cloud=ai"])
+def test_view_pages_have_semantic_shell_skip_link_and_one_h1(accessible_client, path):
+    html = accessible_client.get(path).get_data(as_text=True)
+    parser = StructureParser()
+    parser.feed(html)
+
+    assert html.startswith("<!doctype html>")
+    assert '<html lang="zh-Hant">' in html
+    assert "header" in parser.tags
+    assert "nav" in parser.tags
+    assert "main" in parser.tags
+    assert parser.h1_count == 1
+    assert "main-content" in parser.ids
+    assert ("#main-content", "skip-link") in parser.links
+    assert "—" not in html
+
+
+def test_view_builder_checkboxes_have_visible_labels(accessible_client):
+    html = accessible_client.get("/views/new?cloud=ai").get_data(as_text=True)
+
+    assert 'type="checkbox"' in html
+    assert "<span>" in html
+
+
+def test_view_table_uses_semantic_table_markup_with_scoped_headers(accessible_client):
+    html = accessible_client.get("/views/table?cloud=ai").get_data(as_text=True)
+
+    assert "<table>" in html
+    assert '<caption class="visually-hidden">' in html
+    assert 'scope="col"' in html
+    assert 'scope="row"' in html

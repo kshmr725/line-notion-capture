@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Callable, Optional, Protocol
 from urllib.parse import urlencode, urlparse
 
-from flask import Blueprint, abort, g, render_template, request, url_for
+from flask import Blueprint, Response, abort, g, render_template, request, url_for
 
 from brain_portal.models import (
     CitedAnswer,
@@ -17,6 +17,14 @@ from brain_portal.models import (
     TenantContext,
 )
 from brain_portal.answers import QUERY_LIMIT
+from brain_portal.derived_views import (
+    CLOUD_TABLE_COLUMNS,
+    build_table,
+    column_choices_for_cloud,
+    render_table_csv,
+    render_table_markdown,
+    serialize_view,
+)
 from brain_portal.presentation import (
     clean_display_text,
     icon_name_for_cloud,
@@ -319,6 +327,79 @@ def create_portal_blueprint(dependencies: PortalDependencies) -> Blueprint:
             page_title=item.title,
             tenant=_tenant_view(),
             item=_item_detail(item),
+        )
+
+    @portal.get("/views/new")
+    def view_builder():
+        cloud_key = request.args.get("cloud", "").strip()
+        cloud_definition = next((c for c in CLOUDS if c["key"] == cloud_key), None)
+        if cloud_definition is None or cloud_key not in CLOUD_TABLE_COLUMNS:
+            abort(404)
+        items = [
+            item for item in _tenant_items(dependencies) if item.cloud_key == cloud_key
+        ]
+        return render_template(
+            "portal/view_builder.html",
+            page_title=f"轉成表格 · {cloud_definition['name']}",
+            tenant=_tenant_view(),
+            cloud=cloud_definition,
+            columns=column_choices_for_cloud(cloud_key),
+            types=sorted({item.item_type for item in items}),
+            type_labels={item.item_type: public_type_label(item.item_type) for item in items},
+            concepts=sorted({concept for item in items for concept in item.concepts}),
+        )
+
+    @portal.get("/views/table")
+    def view_table():
+        cloud_key = request.args.get("cloud", "").strip()
+        cloud_definition = next((c for c in CLOUDS if c["key"] == cloud_key), None)
+        if cloud_definition is None or cloud_key not in CLOUD_TABLE_COLUMNS:
+            abort(404)
+        allowed_columns = {key for key, _ in column_choices_for_cloud(cloud_key)}
+        default_columns = [key for key, _ in column_choices_for_cloud(cloud_key)]
+        selected_columns = [
+            column for column in request.args.getlist("column") if column in allowed_columns
+        ] or default_columns
+        item_type = request.args.get("type", "").strip()
+        concept = request.args.get("concept", "").strip()
+        filters = {"cloud": cloud_key}
+        if item_type:
+            filters["type"] = item_type
+        if concept:
+            filters["concept"] = concept
+        items = _tenant_items(dependencies)
+        table = build_table(items, selected_columns, filters)
+
+        export_format = request.args.get("format", "").strip()
+        if export_format == "csv":
+            return Response(
+                render_table_csv(table),
+                mimetype="text/csv",
+                headers={
+                    "Content-Disposition": f"attachment; filename={cloud_key}-table.csv"
+                },
+            )
+        if export_format == "markdown":
+            return Response(render_table_markdown(table), mimetype="text/markdown")
+
+        export_args = dict(cloud=cloud_key, column=selected_columns)
+        if item_type:
+            export_args["type"] = item_type
+        if concept:
+            export_args["concept"] = concept
+        return render_template(
+            "portal/table_view.html",
+            page_title=f"{cloud_definition['name']} 表格",
+            tenant=_tenant_view(),
+            cloud=cloud_definition,
+            table=table,
+            all_columns=column_choices_for_cloud(cloud_key),
+            selected_columns=selected_columns,
+            item_type=item_type,
+            concept=concept,
+            view_config=serialize_view(table.view),
+            csv_url=url_for("portal.view_table", format="csv", **export_args),
+            markdown_url=url_for("portal.view_table", format="markdown", **export_args),
         )
 
     @portal.get("/sync")

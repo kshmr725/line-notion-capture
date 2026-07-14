@@ -1,0 +1,41 @@
+{% extends "portal/base.html" %}
+{% block content %}
+<div class="workspace-page view-builder-page">
+  <header class="page-intro">
+    <p class="eyebrow">轉成表格</p>
+    <h1>{{ cloud.name }} 表格設定</h1>
+    <p>選擇欄位與篩選條件，我們會用你已索引的資料建立表格；每一列都會保留來源連結與更新時間。</p>
+  </header>
+  <form method="get" action="{{ url_for('portal.view_table') }}" class="view-builder-form">
+    <input type="hidden" name="cloud" value="{{ cloud.key }}">
+    <fieldset>
+      <legend>欄位</legend>
+      {% for key, label in columns %}
+      <label class="view-builder-checkbox">
+        <input type="checkbox" name="column" value="{{ key }}" checked>
+        <span>{{ label }}</span>
+      </label>
+      {% endfor %}
+    </fieldset>
+    {% if types %}
+    <div class="control-field">
+      <label for="view-type">類型</label>
+      <select id="view-type" name="type">
+        <option value="">全部類型</option>
+        {% for value in types %}<option value="{{ value }}">{{ type_labels.get(value, value) }}</option>{% endfor %}
+      </select>
+    </div>
+    {% endif %}
+    {% if concepts %}
+    <div class="control-field">
+      <label for="view-concept">概念</label>
+      <select id="view-concept" name="concept">
+        <option value="">全部概念</option>
+        {% for value in concepts %}<option value="{{ value }}">{{ value }}</option>{% endfor %}
+      </select>
+    </div>
+    {% endif %}
+    <button type="submit" class="primary-action">建立表格</button>
+  </form>
+</div>
+{% endblock %}

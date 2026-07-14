@@ -4,7 +4,10 @@
 <div class="workspace-page cloud-workspace cloud-{{ cloud.key }}">
   <header class="cloud-workspace-head">
     <div><p class="eyebrow">{{ cloud.short_name }}</p><h1>{{ cloud.name }}</h1><p>{{ cloud.description }}</p></div>
-    <a class="quiet-action" href="{{ url_for('portal.search', cloud=cloud.key) }}">搜尋這個 Cloud</a>
+    <div class="cloud-workspace-actions">
+      <a class="quiet-action" href="{{ url_for('portal.search', cloud=cloud.key) }}">搜尋這個 Cloud</a>
+      <a class="quiet-action" href="{{ url_for('portal.view_builder', cloud=cloud.key) }}">轉成表格</a>
+    </div>
   </header>
   <nav id="cloud-filters" class="workspace-tabs" aria-label="{{ cloud.name }} 篩選">
     {% for tab in workspace.tabs %}<a class="filter-pill" href="{{ tab.url }}">{{ tab.label }}</a>{% endfor %}

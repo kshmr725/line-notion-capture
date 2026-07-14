@@ -1,0 +1,43 @@
+{% extends "portal/base.html" %}
+{% block content %}
+<div class="workspace-page table-view-page">
+  <header class="page-intro">
+    <p class="eyebrow">{{ cloud.name }}</p>
+    <h1>表格檢視</h1>
+    <p>{{ table.rows|length }} 筆資料，缺少的欄位顯示「未提供」，而不是空白或原始資料。</p>
+  </header>
+  <div class="table-view-actions">
+    <a class="quiet-action" href="{{ url_for('portal.view_builder', cloud=cloud.key) }}">調整欄位</a>
+    <a class="quiet-action" href="{{ csv_url }}">匯出 CSV</a>
+    <a class="quiet-action" href="{{ markdown_url }}">複製 Markdown</a>
+  </div>
+  <div class="table-scroll" tabindex="0" role="region" aria-label="{{ cloud.name }} 表格">
+    <table>
+      <caption class="visually-hidden">{{ cloud.name }} 資料表</caption>
+      <thead>
+        <tr>
+          <th scope="col">標題</th>
+          {% for label in table.column_labels %}<th scope="col">{{ label }}</th>{% endfor %}
+          {% if 'updated_at' not in selected_columns %}<th scope="col">更新時間</th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in table.rows %}
+        <tr>
+          <th scope="row"><a href="{{ row.url }}">{{ row.title }}</a></th>
+          {% for value in row.values %}<td>{{ value }}</td>{% endfor %}
+          {% if 'updated_at' not in selected_columns %}<td>{{ row.updated_at[:10] }}</td>{% endif %}
+        </tr>
+        {% else %}
+        <tr><td colspan="{{ table.column_labels|length + (1 if 'updated_at' in selected_columns else 2) }}">沒有符合條件的資料。</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <details class="view-config-details">
+    <summary>可儲存的檢視設定</summary>
+    <p>複製這段設定，之後可以用來重建同一份表格。</p>
+    <textarea readonly rows="4" aria-label="檢視設定 JSON">{{ view_config }}</textarea>
+  </details>
+</div>
+{% endblock %}

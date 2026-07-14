@@ -70,6 +70,31 @@ class CloudProposal:
 
 
 @dataclass(frozen=True)
+class DerivedView:
+    kind: str
+    cloud_key: str
+    columns: tuple[str, ...]
+    filters: tuple[tuple[str, str], ...]
+    sort: str | None = None
+
+
+@dataclass(frozen=True)
+class TableRow:
+    source_id: str
+    title: str
+    url: str
+    updated_at: str
+    values: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DerivedTable:
+    view: DerivedView
+    column_labels: tuple[str, ...]
+    rows: tuple[TableRow, ...]
+
+
+@dataclass(frozen=True)
 class SyncRun:
     source_type: str
     status: str

@@ -1228,3 +1228,104 @@ def test_item_returns_bounded_503_when_sync_status_lookup_fails():
     assert response.status_code == 503
     assert 'id="service-unavailable"' in html
     assert "private database" not in html
+
+
+def test_view_builder_page_lists_columns_for_a_known_cloud(portal_setup):
+    client, *_ = portal_setup
+
+    response = client.get("/views/new?cloud=web3")
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "賽道" in html
+    assert "論點" in html
+
+
+def test_view_builder_page_404s_for_an_unknown_cloud(portal_setup):
+    client, *_ = portal_setup
+
+    assert client.get("/views/new?cloud=not-a-real-cloud").status_code == 404
+
+
+def test_cloud_page_links_to_the_view_builder(portal_setup):
+    client, *_ = portal_setup
+
+    html = client.get("/cloud/ai").get_data(as_text=True)
+
+    assert 'href="/views/new?cloud=ai"' in html
+
+
+def test_view_table_renders_source_links_and_missing_field_placeholder(portal_setup):
+    client, repository, *_ = portal_setup
+    repository.items = [
+        item(
+            "web3-a",
+            cloud_key="web3",
+            concepts=("restaking",),
+            summary="Restaking secures multiple networks.",
+        )
+    ]
+
+    response = client.get("/views/table?cloud=web3")
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert 'href="/item/web3-a"' in html
+    assert "restaking" in html
+    assert "未提供" in html
+
+
+def test_view_table_never_duplicates_the_updated_at_column(portal_setup):
+    client, repository, *_ = portal_setup
+    repository.items = [item("web3-a", cloud_key="web3", concepts=("restaking",))]
+
+    html = client.get(
+        "/views/table?cloud=web3&column=sector&column=updated_at"
+    ).get_data(as_text=True)
+
+    assert html.count("更新時間") == 1
+
+
+def test_view_table_respects_selected_columns(portal_setup):
+    client, repository, *_ = portal_setup
+    repository.items = [item("web3-a", cloud_key="web3", concepts=("restaking",))]
+
+    response = client.get("/views/table?cloud=web3&column=sector")
+    html = response.get_data(as_text=True)
+
+    assert "賽道" in html
+    assert "論點" not in html
+
+
+def test_view_table_csv_export_returns_csv(portal_setup):
+    client, repository, *_ = portal_setup
+    repository.items = [item("web3-a", cloud_key="web3", concepts=("restaking",))]
+
+    response = client.get("/views/table?cloud=web3&format=csv")
+
+    assert response.status_code == 200
+    assert response.mimetype == "text/csv"
+    assert "restaking" in response.get_data(as_text=True)
+
+
+def test_view_table_markdown_export_returns_markdown(portal_setup):
+    client, repository, *_ = portal_setup
+    repository.items = [item("web3-a", cloud_key="web3", concepts=("restaking",))]
+
+    response = client.get("/views/table?cloud=web3&format=markdown")
+
+    assert response.status_code == 200
+    assert response.mimetype == "text/markdown"
+    assert "| 標題 |" in response.get_data(as_text=True)
+
+
+def test_view_table_never_serves_another_tenants_rows(portal_setup):
+    client, repository, *_ = portal_setup
+    repository.items = [
+        item("web3-a", cloud_key="web3", concepts=("restaking",)),
+        item("secret-web3", tenant_id="other-tenant", cloud_key="web3"),
+    ]
+
+    html = client.get("/views/table?cloud=web3").get_data(as_text=True)
+
+    assert "secret-web3" not in html
