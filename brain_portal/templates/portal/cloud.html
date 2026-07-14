@@ -9,6 +9,7 @@
       <a class="quiet-action" href="{{ url_for('portal.view_builder', cloud=cloud.key) }}">轉成表格</a>
       <a class="quiet-action" href="{{ url_for('portal.view_chart', cloud=cloud.key) }}">看圖表</a>
       <a class="quiet-action" href="{{ url_for('portal.view_slides', cloud=cloud.key) }}">看簡報</a>
+      <a class="quiet-action" href="{{ url_for('portal.view_briefing', cloud=cloud.key) }}">生成摘要</a>
     </div>
   </header>
   <nav id="cloud-filters" class="workspace-tabs" aria-label="{{ cloud.name }} 篩選">

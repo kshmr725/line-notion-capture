@@ -9,8 +9,10 @@ from brain_portal.answers import (
     DeepSeekAnswerProvider,
     GeminiAnswerProvider,
     answer_query,
+    answer_query_with_citations,
 )
-from brain_portal.models import KnowledgeItem, SearchHit
+from brain_portal.briefing import build_briefing
+from brain_portal.models import CitedAnswer, KnowledgeItem, SearchHit
 
 
 class FakeProvider:
@@ -307,3 +309,47 @@ def test_answer_query_rejects_over_limit_query_without_calling_provider():
 
     assert answer_query("q" * 501, [hit()], [provider]) is None
     assert provider.prompts == []
+
+
+def test_answer_query_with_citations_preserves_provider_fallback_contract():
+    answer = answer_query_with_citations(
+        "What changed?", [hit()], [FakeProvider(response(), "deepseek")]
+    )
+
+    assert answer == CitedAnswer("Supported answer", ("item-1",), "deepseek")
+
+
+def test_build_briefing_contains_required_source_grounded_sections():
+    hits = [hit("item-1"), hit("item-2")]
+    answer = CitedAnswer("Supported answer", ("item-1",), "gemini")
+
+    briefing = build_briefing("compare these notes", hits, answer)
+
+    assert briefing is not None
+    assert [section.heading for section in briefing.sections] == [
+        "回答",
+        "關鍵證據",
+        "比較",
+        "未確定事項",
+        "來源",
+    ]
+    assert briefing.sections[0].source_ids == ("item-1",)
+    assert briefing.sections[1].source_ids == ("item-1", "item-2")
+    assert briefing.source_ids == ("item-1", "item-2")
+    assert briefing.provider == "gemini"
+
+
+def test_build_briefing_refuses_to_repeat_an_uncited_answer():
+    hits = [hit("item-1")]
+    unsupported = CitedAnswer("Unsupported claim", ("not-retrieved",), "gemini")
+
+    briefing = build_briefing("find evidence", hits, unsupported)
+
+    assert briefing is not None
+    assert briefing.sections[0].body != "Unsupported claim"
+    assert "沒有來源支持" in briefing.sections[0].body
+    assert briefing.provider is None
+
+
+def test_build_briefing_returns_none_without_retrieved_sources():
+    assert build_briefing("empty", [], None) is None

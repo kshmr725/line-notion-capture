@@ -1,0 +1,41 @@
+{% extends "portal/base.html" %}
+{% block content %}
+<div class="briefing-view workspace-page">
+  <header class="page-intro">
+    <p class="eyebrow">{{ cloud.name if cloud else "Brain Cloud" }}</p>
+    <h1>來源引用摘要</h1>
+    <p>{{ source_count }} 筆來源；這份摘要只使用已索引內容，未有來源支持的內容會明確標示。</p>
+  </header>
+  <nav class="briefing-actions" aria-label="摘要工具">
+    <a class="quiet-action" href="{{ table_url }}">看表格</a>
+    <a class="quiet-action" href="{{ chart_url }}">看圖表</a>
+    <button type="button" onclick="window.print()">列印摘要</button>
+  </nav>
+  {% if briefing %}
+  <div class="briefing-meta">{{ briefing.title }} · {{ briefing.provider or "來源整理" }}</div>
+  <div class="briefing-sections">
+    {% for section in briefing.sections %}
+    <section class="briefing-section" aria-labelledby="briefing-section-{{ loop.index }}">
+      <h2 id="briefing-section-{{ loop.index }}">{{ section.heading }}</h2>
+      <p class="briefing-body">{{ section.body }}</p>
+      {% if section.source_ids %}
+      <footer class="briefing-citations">
+        <span>證據來源</span>
+        <ul>
+          {% for source_id in section.source_ids %}
+          <li><a href="{{ url_for('portal.item_detail', source_id=source_id) }}">{{ source_titles.get(source_id, "來源筆記") }}</a></li>
+          {% endfor %}
+        </ul>
+      </footer>
+      {% endif %}
+    </section>
+    {% endfor %}
+  </div>
+  {% else %}
+  <section class="state-card" aria-labelledby="briefing-empty-title">
+    <h2 id="briefing-empty-title">目前沒有可引用來源</h2>
+    <p>先同步資料或換一個搜尋條件，再建立來源引用摘要。</p>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

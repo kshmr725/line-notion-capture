@@ -327,15 +327,28 @@ button:active, .primary-action:active { transform: translateY(1px) scale(.99); }
 .slide-sources a { color: var(--portal-blue); text-decoration: underline; text-underline-offset: 3px; }
 .slide-empty-source { color: var(--portal-muted); }
 .slide-footer time { flex: 0 0 auto; white-space: nowrap; }
+.briefing-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 18px; }
+.briefing-meta { margin: 0 0 14px; color: var(--portal-muted); font-size: .8rem; }
+.briefing-sections { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, .8fr); gap: 14px; align-items: start; }
+.briefing-section { padding: 20px; border: 1px solid var(--portal-line); border-radius: 16px; background: var(--portal-paper); }
+.briefing-section:first-child { grid-column: 1 / -1; border-left: 4px solid var(--portal-amber-strong); }
+.briefing-section h2 { margin: 0 0 9px; font-family: var(--display); font-size: 1.15rem; }
+.briefing-body { margin: 0; white-space: pre-line; line-height: 1.75; }
+.briefing-citations { display: grid; gap: 5px; margin-top: 15px; padding-top: 11px; border-top: 1px solid var(--portal-line); color: var(--portal-muted); font-size: .76rem; }
+.briefing-citations span { color: var(--portal-ink); font-weight: 800; }
+.briefing-citations ul { display: flex; flex-wrap: wrap; gap: 5px 12px; margin: 0; padding: 0; list-style: none; }
+.briefing-citations a { color: var(--portal-blue); text-decoration: underline; text-underline-offset: 3px; }
 @media print {
   body { background: #fff; }
-  .cloud-rail, .workspace-topbar, .workspace-footer, .slide-controls, .skip-link { display: none !important; }
+  .cloud-rail, .workspace-topbar, .workspace-footer, .slide-controls, .briefing-actions, .skip-link { display: none !important; }
   .workspace-shell { width: 100%; margin: 0; }
   .workspace-page { max-width: none; padding: 0; }
   .slides-view-page .page-intro { padding: 0 0 18px; }
   .slide-deck { display: block; }
   .slide-card { min-height: 92vh; margin: 0; border: 0; border-radius: 0; box-shadow: none; break-after: page; page-break-after: always; }
   .slide-card:last-child { break-after: auto; page-break-after: auto; }
+  .briefing-sections { display: block; }
+  .briefing-section { margin-bottom: 16px; border-radius: 0; box-shadow: none; break-inside: avoid; }
   a { color: inherit; text-decoration: none; }
 }
 

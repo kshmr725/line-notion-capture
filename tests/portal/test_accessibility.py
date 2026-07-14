@@ -157,6 +157,7 @@ def test_wordmark_and_card_primary_links_have_touch_target_contract(accessible_c
         "/views/table?cloud=ai",
         "/views/chart?cloud=ai",
         "/views/slides?cloud=ai",
+        "/views/briefing?cloud=ai&q=agent",
     ],
 )
 def test_view_pages_have_semantic_shell_skip_link_and_one_h1(accessible_client, path):

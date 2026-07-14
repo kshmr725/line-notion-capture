@@ -1441,3 +1441,16 @@ def test_view_slides_is_source_linked_and_print_ready(portal_setup):
     assert "來源" in html
     assert "/item/ai-agent" in html
     assert "列印簡報" in html
+
+
+def test_view_briefing_has_grounded_sections_and_source_links(portal_setup):
+    client, *_ = portal_setup
+
+    html = client.get("/views/briefing?cloud=ai&q=agent").get_data(as_text=True)
+
+    assert 'class="briefing-view workspace-page"' in html
+    for heading in ("回答", "關鍵證據", "比較", "未確定事項", "來源"):
+        assert heading in html
+    assert "Reliable agents pair clear boundaries" in html
+    assert "/item/ai-agent" in html
+    assert "來源筆記" not in html

@@ -17,6 +17,7 @@ from brain_portal.models import (
     TenantContext,
 )
 from brain_portal.answers import QUERY_LIMIT
+from brain_portal.briefing import build_briefing
 from brain_portal.derived_views import (
     CHART_TYPES,
     CLOUD_TABLE_COLUMNS,
@@ -504,6 +505,67 @@ def create_portal_blueprint(dependencies: PortalDependencies) -> Blueprint:
             table_url=url_for("portal.view_table", **view_args),
             chart_url=url_for("portal.view_chart", cloud=cloud_key, column=selected_columns[0]),
             source_count=len(table.rows),
+        )
+
+    @portal.get("/views/briefing")
+    def view_briefing():
+        cloud_key = request.args.get("cloud", "").strip() or None
+        if cloud_key and not any(cloud["key"] == cloud_key for cloud in CLOUDS):
+            abort(404)
+        query = request.args.get("q", "").strip()[:QUERY_LIMIT]
+        items = _tenant_items(dependencies)
+        allowed_items = {
+            item.source_id: item
+            for item in items
+            if cloud_key is None or item.cloud_key == cloud_key
+        }
+        answer = None
+        if query:
+            try:
+                raw_results = dependencies.search_service(
+                    g.portal_tenant.tenant_id, query, cloud_key
+                )
+                hits = tuple(
+                    SearchHit(
+                        item=allowed_items[hit.item.source_id],
+                        score=hit.score,
+                        matched_by=hit.matched_by,
+                    )
+                    for hit in raw_results.hits
+                    if hit.item.source_id in allowed_items
+                )
+                answer = dependencies.answer_service(query, list(hits)) if hits else None
+            except Exception:
+                raise PortalDataUnavailable() from None
+        else:
+            hits = tuple(
+                SearchHit(item=item, score=0.0, matched_by=("catalog",))
+                for item in allowed_items.values()
+            )
+        briefing = build_briefing(query or "這個 Cloud", hits, answer)
+        source_titles = {item.source_id: item.title for item in allowed_items.values()}
+        cloud_definition = next(
+            (cloud for cloud in CLOUDS if cloud["key"] == cloud_key), None
+        )
+        return render_template(
+            "portal/briefing_view.html",
+            page_title="來源引用摘要",
+            tenant=_tenant_view(),
+            briefing=briefing,
+            source_titles=source_titles,
+            cloud=cloud_definition,
+            query=query,
+            source_count=len(hits),
+            table_url=(
+                url_for("portal.view_table", cloud=cloud_key)
+                if cloud_key
+                else url_for("portal.search")
+            ),
+            chart_url=(
+                url_for("portal.view_chart", cloud=cloud_key)
+                if cloud_key
+                else url_for("portal.search")
+            ),
         )
 
     @portal.get("/sync")

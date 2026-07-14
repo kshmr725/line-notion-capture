@@ -114,6 +114,22 @@ class SlideSpec:
 
 
 @dataclass(frozen=True)
+class BriefingSection:
+    heading: str
+    body: str
+    source_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class BriefingSpec:
+    title: str
+    query: str
+    sections: tuple[BriefingSection, ...]
+    source_ids: tuple[str, ...]
+    provider: str | None = None
+
+
+@dataclass(frozen=True)
 class SyncRun:
     source_type: str
     status: str

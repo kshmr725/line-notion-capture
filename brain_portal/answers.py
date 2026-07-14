@@ -94,6 +94,15 @@ def answer_query(
     return None
 
 
+def answer_query_with_citations(
+    query: str,
+    hits: list[SearchHit],
+    provider_chain: list[AnswerProvider],
+) -> CitedAnswer | None:
+    """Named contract for Insight Studio's source-grounded answer mode."""
+    return answer_query(query, hits, provider_chain)
+
+
 def _build_prompt(query: str, hits: list[SearchHit]) -> str:
     evidence = [
         {
