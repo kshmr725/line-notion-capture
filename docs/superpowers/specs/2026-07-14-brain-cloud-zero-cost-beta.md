@@ -6,6 +6,11 @@ Status: Approved product direction; written specification for implementation rev
 
 Task: `2026-07-14-brain-cloud-zero-cost-beta`
 
+> **Visual decision update (2026-07-14):** the former black/white/blue visual
+> interpretation is superseded by
+> [`2026-07-14-brain-cloud-warm-portal-visual-system.md`](2026-07-14-brain-cloud-warm-portal-visual-system.md).
+> Its information architecture remains valid; its visual tokens and card rules do not.
+
 ## 1. Outcome
 
 Deliver a controlled-beta Second Brain that a general user can start without understanding the
