@@ -21,3 +21,7 @@ class PortalSettings:
     )
     notion_token: str = os.getenv("NOTION_TOKEN", "")
     notion_api_version: str = "2026-03-11"
+    session_secret: str = os.getenv("PORTAL_SESSION_SECRET", "")
+    session_ttl_days: int = int(os.getenv("PORTAL_SESSION_TTL_DAYS", "14"))
+    magic_link_ttl_minutes: int = int(os.getenv("PORTAL_MAGIC_LINK_TTL_MINUTES", "15"))
+    dev_auth: bool = os.getenv("PORTAL_DEV_AUTH", "false").strip().lower() == "true"

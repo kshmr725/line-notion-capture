@@ -48,6 +48,18 @@ class SearchHit:
 
 
 @dataclass(frozen=True)
+class AuthenticatedPrincipal:
+    user_id: str
+    email: str
+
+
+@dataclass(frozen=True)
+class OnboardingState:
+    tenant_id: str
+    status: str
+
+
+@dataclass(frozen=True)
 class SyncRun:
     source_type: str
     status: str

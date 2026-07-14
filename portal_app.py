@@ -1,11 +1,17 @@
 from __future__ import annotations
 
-from flask import Flask
+from flask import Flask, redirect, request, url_for
 
 from brain_portal.answers import (
     DeepSeekAnswerProvider,
     GeminiAnswerProvider,
     answer_query,
+)
+from brain_portal.auth import (
+    NullMailTransport,
+    create_auth_blueprint,
+    create_authenticated_tenant_resolver,
+    resolve_principal,
 )
 from brain_portal.config import PortalSettings
 from brain_portal.db import PortalRepository
@@ -26,14 +32,32 @@ def create_app(
         PORTAL_TENANT_ID=settings.tenant_id,
         PORTAL_TENANT_NAME=settings.tenant_name,
     )
+    repository = PortalRepository(settings.database_path)
+    mail_transport = NullMailTransport()
+    app.extensions["mail_transport"] = mail_transport
     app.register_blueprint(
-        create_portal_blueprint(dependencies or _default_dependencies(settings))
+        create_auth_blueprint(settings, repository, mail_transport=mail_transport)
     )
+    app.register_blueprint(
+        create_portal_blueprint(dependencies or _default_dependencies(settings, repository))
+    )
+
+    @app.errorhandler(401)
+    def redirect_unauthenticated(error):
+        if settings.tenant_id.strip() or not settings.session_secret.strip():
+            return error
+        principal = resolve_principal(settings, repository)
+        if principal is None:
+            return redirect(url_for("auth.login_page", next=request.path))
+        return redirect(url_for("auth.onboarding"))
+
     return app
 
 
-def _default_dependencies(settings: PortalSettings) -> PortalDependencies:
-    repository = PortalRepository(settings.database_path)
+def _default_dependencies(
+    settings: PortalSettings, repository: PortalRepository | None = None
+) -> PortalDependencies:
+    repository = repository or PortalRepository(settings.database_path)
     gemini_key = settings.gemini_api_key.strip()
     deepseek_key = settings.deepseek_api_key.strip()
     embedder = (
@@ -59,10 +83,13 @@ def _default_dependencies(settings: PortalSettings) -> PortalDependencies:
             )
         )
 
-    def resolve_tenant() -> TenantContext | None:
-        if not settings.tenant_id.strip():
-            return None
-        return TenantContext(settings.tenant_id, settings.tenant_name)
+    if settings.tenant_id.strip():
+
+        def resolve_tenant() -> TenantContext | None:
+            return TenantContext(settings.tenant_id, settings.tenant_name)
+
+    else:
+        resolve_tenant = create_authenticated_tenant_resolver(settings, repository)
 
     def search(tenant_id: str, query: str, cloud_key: str | None):
         if embedder is not None:

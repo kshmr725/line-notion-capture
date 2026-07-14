@@ -1,0 +1,20 @@
+<!doctype html>
+{% from "portal/_icons.html" import icon %}
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4f2ed">
+  <title>{{ page_title }} · Brain Cloud</title>
+  <link rel="stylesheet" href="/portal-static/portal.css">
+</head>
+<body>
+  <a class="skip-link" href="#main-content">跳到主要內容</a>
+  <div class="auth-shell">
+    <a class="workspace-brand auth-brand" href="{{ url_for('auth.login_page') }}" aria-label="Brain Cloud">{{ icon('grid') }}<span>Brain Cloud</span></a>
+    <main id="main-content" tabindex="-1" class="auth-card">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</body>
+</html>
