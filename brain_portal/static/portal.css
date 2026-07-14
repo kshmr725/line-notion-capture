@@ -303,6 +303,13 @@ button:active, .primary-action:active { transform: translateY(1px) scale(.99); }
 .chart-svg text { font-family: var(--body); fill: var(--portal-ink); }
 .chart-svg .chart-bar-label { font-size: 11px; font-weight: 700; }
 .chart-svg .chart-bar-value { font-size: 11px; fill: var(--portal-muted); }
+.chart-svg-donut { max-width: 280px; margin: 0 auto; }
+.donut-track { stroke: var(--portal-line); }
+.donut-segment { transition: stroke-dasharray .2s ease; }
+.donut-segment-0 { stroke: var(--portal-amber-strong); }
+.donut-segment-1 { stroke: var(--portal-blue); }
+.donut-segment-2 { stroke: var(--portal-ink); }
+.donut-segment-3 { stroke: var(--portal-muted); }
 .chart-data-table { width: 100%; border-collapse: collapse; margin-top: 18px; font-size: .88rem; }
 .chart-data-table th, .chart-data-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--portal-line); }
 .chart-data-table thead th { color: var(--portal-muted); font-weight: 700; font-size: .76rem; text-transform: uppercase; letter-spacing: .04em; }

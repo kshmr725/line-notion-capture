@@ -1350,6 +1350,39 @@ def test_view_chart_renders_a_labeled_svg_and_data_table(portal_setup):
     assert '<desc id="chart-desc">' in html
 
 
+def _chart_figure(html: str) -> str:
+    start = html.index('<figure class="chart-figure">')
+    end = html.index("</figure>", start)
+    return html[start:end]
+
+
+def test_view_chart_donut_renders_distinct_circle_segments_not_bars(portal_setup):
+    client, repository, *_ = portal_setup
+    repository.items = [
+        item("a", cloud_key="web3", concepts=("restaking",)),
+        item("b", cloud_key="web3", concepts=("mev",)),
+    ]
+
+    response = client.get("/views/chart?cloud=web3&column=sector&chart_type=donut")
+    figure = _chart_figure(response.get_data(as_text=True))
+
+    assert response.status_code == 200
+    assert figure.count("<circle") >= 3  # background + one segment per row
+    assert "stroke-dasharray" in figure
+    assert "<rect" not in figure
+
+
+def test_view_chart_bar_still_renders_rects_not_circles(portal_setup):
+    client, repository, *_ = portal_setup
+    repository.items = [item("a", cloud_key="web3", concepts=("restaking",))]
+
+    response = client.get("/views/chart?cloud=web3&column=sector&chart_type=bar")
+    figure = _chart_figure(response.get_data(as_text=True))
+
+    assert "<rect" in figure
+    assert "<circle" not in figure
+
+
 def test_view_chart_404s_for_an_unknown_cloud(portal_setup):
     client, *_ = portal_setup
 

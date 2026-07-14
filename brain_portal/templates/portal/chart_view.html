@@ -17,6 +17,19 @@
     {% endfor %}
   </nav>
   <figure class="chart-figure">
+    {% if chart_type == 'donut' %}
+    <svg class="chart-svg chart-svg-donut" viewBox="0 0 42 42" role="img" aria-labelledby="chart-title chart-desc">
+      <title id="chart-title">{{ chart.title }}</title>
+      <desc id="chart-desc">{{ chart.summary }}</desc>
+      <circle cx="21" cy="21" r="15.9155" fill="transparent" class="donut-track" stroke-width="6"></circle>
+      {% for row in chart_rows %}
+      <circle cx="21" cy="21" r="15.9155" fill="transparent" stroke-width="6"
+        stroke-dasharray="{{ row.share }} {{ (100 - row.share)|round(2) }}"
+        stroke-dashoffset="{{ row.offset }}"
+        class="donut-segment donut-segment-{{ row.color_index }}"></circle>
+      {% endfor %}
+    </svg>
+    {% else %}
     <svg class="chart-svg" viewBox="0 0 480 {{ (chart_rows|length * 44) or 44 }}" width="480" height="{{ (chart_rows|length * 44) or 44 }}" role="img" aria-labelledby="chart-title chart-desc">
       <title id="chart-title">{{ chart.title }}</title>
       <desc id="chart-desc">{{ chart.summary }}</desc>
@@ -26,6 +39,7 @@
       <text x="{{ (row.percent * 4.6)|round(1) + 8 }}" y="{{ loop.index0 * 44 + 34 }}" class="chart-bar-value">{{ row.value|int }}</text>
       {% endfor %}
     </svg>
+    {% endif %}
     <figcaption class="visually-hidden">{{ chart.summary }}</figcaption>
   </figure>
   <table class="chart-data-table">

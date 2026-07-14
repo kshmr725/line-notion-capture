@@ -432,14 +432,22 @@ def create_portal_blueprint(dependencies: PortalDependencies) -> Blueprint:
         table = build_table(items, (column,), filters)
         chart = build_chart(table, chart_type)
         max_value = max(chart.values) if chart.values else 0.0
-        chart_rows = [
-            {
-                "label": label,
-                "value": value,
-                "percent": round((value / max_value) * 100, 2) if max_value else 0,
-            }
-            for label, value in zip(chart.labels, chart.values)
-        ]
+        total_value = sum(chart.values) if chart.values else 0.0
+        chart_rows = []
+        cumulative_share = 0.0
+        for index, (label, value) in enumerate(zip(chart.labels, chart.values)):
+            share = round((value / total_value) * 100, 2) if total_value else 0.0
+            chart_rows.append(
+                {
+                    "label": label,
+                    "value": value,
+                    "percent": round((value / max_value) * 100, 2) if max_value else 0,
+                    "share": share,
+                    "offset": round(25 - cumulative_share, 2),
+                    "color_index": index % 4,
+                }
+            )
+            cumulative_share += share
         return render_template(
             "portal/chart_view.html",
             page_title=f"{cloud_definition['name']} 圖表",
