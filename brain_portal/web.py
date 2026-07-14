@@ -24,6 +24,7 @@ from brain_portal.presentation import (
     place_facts,
     public_cloud_label,
     public_type_label,
+    render_markdown_body,
 )
 from brain_portal.search import SearchResults
 
@@ -369,6 +370,7 @@ def _item_detail(item: KnowledgeItem) -> dict[str, object]:
     detail = _item_card(item)
     detail.update(
         body=item.body,
+        rendered_body=render_markdown_body(item.body),
         concepts=item.concepts,
         place=item.place,
         place_facts=place_facts(item.place, item.summary, item.body),
@@ -405,8 +407,15 @@ def _breadcrumbs(item: KnowledgeItem) -> list[dict[str, str | None]]:
 
 
 def _takeaways(item: KnowledgeItem) -> list[str]:
-    values = [clean_display_text(item.summary)]
-    values.extend(clean_display_text(part) for part in item.body.split("\n\n") if part.strip())
+    def clean_takeaway(value: str) -> str:
+        text = clean_display_text(value)
+        text = re.sub(r"^(?:K#|#{1,6})\s*", "", text)
+        return re.sub(r"^(?:[-*]|\d+\.)\s+", "", text).strip()
+
+    values = [clean_takeaway(item.summary)]
+    values.extend(
+        clean_takeaway(part) for part in item.body.split("\n\n") if part.strip()
+    )
     return list(dict.fromkeys(value[:280] for value in values if value))[:3]
 
 

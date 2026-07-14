@@ -6,6 +6,7 @@ from html import unescape
 from typing import Any
 
 import yaml
+from markupsafe import Markup, escape
 
 _DATE_PREFIX = re.compile(r"^\d{4}-\d{2}-\d{2}\s*")
 _CATEGORY_PREFIX = re.compile(r"^\[[^\]]+\]\s*")
@@ -72,6 +73,76 @@ def clean_display_text(value: str) -> str:
     text = re.sub(r"<[^>]+>", " ", text)
     text = re.sub(r"[*_~`]+", "", text)
     return re.sub(r"\s+", " ", text).strip()
+
+
+def render_markdown_body(body: str) -> Markup:
+    """Render the small Markdown subset used by source notes safely.
+
+    The portal is a reader, not an editor.  Rendering headings, emphasis,
+    links, lists, and Obsidian callouts here prevents source syntax from
+    leaking into the UI while keeping arbitrary HTML escaped.
+    """
+    output: list[str] = []
+    list_open = False
+
+    def close_list() -> None:
+        nonlocal list_open
+        if list_open:
+            output.append("</ul>")
+            list_open = False
+
+    for raw_line in str(body or "").replace("\r\n", "\n").splitlines():
+        line = raw_line.strip()
+        if not line:
+            close_list()
+            continue
+        line = re.sub(r"^K#\s+", "# ", line)
+        heading = re.match(r"^(#{1,6})\s+(.+)$", line)
+        if heading:
+            close_list()
+            level = max(2, min(6, len(heading.group(1)) + 1))
+            output.append(f"<h{level}>{_render_inline(heading.group(2))}</h{level}>")
+            continue
+        callout = re.match(r"^>\s*\[!(tip|important|warning|note)\]\s*(.*)$", line)
+        if callout:
+            close_list()
+            kind, content = callout.groups()
+            output.append(
+                f'<aside class="source-callout source-callout-{kind}">{_render_inline(content)}</aside>'
+            )
+            continue
+        bullet = re.match(r"^(?:[-*]|\d+\.)\s+(.+)$", line)
+        if bullet:
+            if not list_open:
+                output.append("<ul>")
+                list_open = True
+            output.append(f"<li>{_render_inline(bullet.group(1))}</li>")
+            continue
+        close_list()
+        output.append(f"<p>{_render_inline(line)}</p>")
+    close_list()
+    return Markup("\n".join(output))
+
+
+def _render_inline(value: str) -> str:
+    link_pattern = re.compile(r"\[([^\]]+)\]\((https?://[^\s)]+)\)")
+    chunks: list[str] = []
+    cursor = 0
+    for match in link_pattern.finditer(value):
+        chunks.append(_render_emphasis(value[cursor : match.start()]))
+        chunks.append(
+            f'<a href="{escape(match.group(2))}" rel="noreferrer">'
+            f"{_render_emphasis(match.group(1))}</a>"
+        )
+        cursor = match.end()
+    chunks.append(_render_emphasis(value[cursor:]))
+    return "".join(chunks)
+
+
+def _render_emphasis(value: str) -> str:
+    escaped = str(escape(value)).replace("&lt;br&gt;", "<br>")
+    escaped = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", escaped)
+    return re.sub(r"(?<!\*)\*([^*]+)\*(?!\*)", r"<em>\1</em>", escaped)
 
 
 _PLACE_FACT_PATTERNS = (

@@ -173,6 +173,11 @@ button:active, .primary-action:active { transform: translateY(1px) scale(.99); }
 .reading-section { max-width: 75ch; margin: 30px 0; }
 .reading-section h2 { font-size: 1.25rem; margin: 0 0 10px; }
 .reading-section p, .reading-section li { line-height: 1.8; }
+.reading-body h2, .reading-body h3, .reading-body h4 { margin: 1.2em 0 .45em; }
+.reading-body p { margin: .65em 0; }
+.reading-body ul { margin: .6em 0; padding-left: 1.35em; }
+.reading-body a { color: var(--portal-blue); text-decoration: underline; text-underline-offset: 2px; }
+.source-callout { margin: .8em 0; padding: 10px 13px; border-left: 3px solid var(--portal-amber-strong); border-radius: 8px; background: var(--portal-amber); }
 .item-metadata { float: right; width: min(260px, 32%); margin: 0 0 24px 28px; padding: 18px; }
 .item-metadata h2, .place-sheet h2 { margin: 0 0 12px; font-size: 1.05rem; }
 .item-metadata dl, .place-sheet dl { display: grid; gap: 8px; margin: 0 0 16px; }

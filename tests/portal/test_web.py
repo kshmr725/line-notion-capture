@@ -364,6 +364,29 @@ def test_reader_cards_strip_source_markup_from_summaries():
     assert "**summary**" not in html
 
 
+def test_item_reader_renders_markdown_body_without_source_syntax():
+    repository = FakeRepository()
+    repository.items = [
+        item(
+            "formatted",
+            body="# 不應該露出的 Markdown 標記\n\n**重點**<br>第二行\n\n- 第一項\n- 第二項",
+        )
+    ]
+    app = create_app(
+        dependencies=PortalDependencies(
+            repository, TenantResolver(), SearchService(), AnswerService(False)
+        )
+    )
+    app.config.update(TESTING=True)
+
+    html = app.test_client().get("/item/formatted").get_data(as_text=True)
+
+    assert "<h2>不應該露出的 Markdown 標記</h2>" in html
+    assert "<strong>重點</strong><br>第二行" in html
+    assert "<ul>" in html and "<li>第一項</li>" in html
+    assert "# 不應該露出的 Markdown 標記" not in html
+
+
 def test_workspace_navigation_uses_task_language_instead_of_schema_terms(portal_setup):
     client, *_ = portal_setup
 
