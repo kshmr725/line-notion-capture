@@ -2,9 +2,14 @@
 {% from "portal/_icons.html" import icon %}
 {% block content %}
 <div class="workspace-page home-page">
-  <section class="workspace-heading" aria-labelledby="home-title">
-    <p class="eyebrow">你的 Second Brain</p>
-    <div><h1 id="home-title">從你想找的事開始。</h1><p>搜尋所有知識，或直接進入一個 Cloud。</p><div class="intent-links"><a class="intent-link" href="{{ url_for('portal.search', q='研究一個主題') }}">研究一個主題</a><a class="intent-link" href="{{ url_for('portal.search', q='找一個地點') }}">找一個地點</a><a class="intent-link" href="{{ url_for('portal.search', q='重用一套方法') }}">重用一套方法</a><a class="intent-link" href="{{ url_for('portal.search', q='探索關聯') }}">探索關聯</a></div></div>
+  <section class="workspace-heading home-hero" aria-labelledby="home-title">
+    <div class="home-hero-copy"><h1 id="home-title">從你想找的事開始。</h1><p>搜尋所有知識，或直接進入一個 Cloud。</p></div>
+    <nav class="intent-links" aria-label="快速開始">
+      <a class="intent-link" data-intent="research" href="{{ url_for('portal.search', q='研究一個主題') }}"><span class="intent-link-index">01</span><strong>研究一個主題</strong><span class="intent-link-arrow" aria-hidden="true">↗</span></a>
+      <a class="intent-link" data-intent="place" href="{{ url_for('portal.search', q='找一個地點') }}"><span class="intent-link-index">02</span><strong>找一個地點</strong><span class="intent-link-arrow" aria-hidden="true">↗</span></a>
+      <a class="intent-link" data-intent="method" href="{{ url_for('portal.search', q='重用一套方法') }}"><span class="intent-link-index">03</span><strong>重用一套方法</strong><span class="intent-link-arrow" aria-hidden="true">↗</span></a>
+      <a class="intent-link" data-intent="related" href="{{ url_for('portal.search', q='探索關聯') }}"><span class="intent-link-index">04</span><strong>探索關聯</strong><span class="intent-link-arrow" aria-hidden="true">↗</span></a>
+    </nav>
   </section>
   <section id="cloud-gallery" class="workspace-section" aria-labelledby="cloud-title">
     <div class="section-head"><h2 id="cloud-title">我的 Cloud</h2><span>依內容類型快速進入</span></div>

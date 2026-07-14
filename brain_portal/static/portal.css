@@ -62,6 +62,8 @@ button:active, .primary-action:active { transform: translateY(1px) scale(.99); }
 
 .workspace-page { padding: 34px 0 58px; }
 .workspace-heading, .cloud-workspace-head { display: flex; align-items: end; justify-content: space-between; gap: 22px; padding: 7px 0 26px; }
+.home-hero { display: block; padding-top: 12px; padding-bottom: 32px; }
+.home-hero-copy { max-width: 720px; }
 .workspace-heading h1, .cloud-workspace-head h1, .page-intro h1, .item-header h1 { margin: 5px 0 7px; font-family: var(--display); font-size: clamp(2rem, 4vw, 3rem); line-height: 1.08; letter-spacing: -.055em; text-wrap: balance; }
 .workspace-heading p:not(.eyebrow), .cloud-workspace-head p:not(.eyebrow), .page-intro p:not(.eyebrow) { margin: 0; color: var(--portal-muted); max-width: 62ch; }
 .eyebrow { margin: 0; color: var(--portal-amber-strong); font-size: .72rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
@@ -70,9 +72,11 @@ button:active, .primary-action:active { transform: translateY(1px) scale(.99); }
 .section-head h2, .workspace-section h2, .food-panel h2, .ai-guide h2 { margin: 0; font-family: var(--display); font-size: 1.18rem; letter-spacing: -.03em; }
 .section-head span { color: var(--portal-muted); font-size: .78rem; }
 
-.intent-links { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 20px; }
-.intent-link { display: inline-flex; align-items: center; min-height: 40px; padding: 7px 12px; border: 1px solid var(--portal-line); border-radius: 999px; background: rgba(255, 253, 248, .6); color: var(--portal-ink); font-size: .82rem; transition: border-color .18s ease, background-color .18s ease, transform .18s ease; }
-.intent-link:hover { background: var(--portal-amber); border-color: var(--portal-amber); transform: translateY(-1px); }
+.intent-links { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 28px; }
+.intent-link { display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; min-height: 92px; padding: 12px 14px; border: 1px solid var(--portal-line); border-radius: 13px; background: var(--portal-paper); color: var(--portal-ink); font-size: .86rem; transition: border-color .18s ease, background-color .18s ease, transform .18s ease, box-shadow .18s ease; }
+.intent-link-index { color: var(--portal-amber-strong); font-size: .68rem; font-variant-numeric: tabular-nums; letter-spacing: .08em; }
+.intent-link-arrow { align-self: flex-end; color: var(--portal-muted); font-size: 1.1rem; line-height: 1; }
+.intent-link:hover { background: var(--portal-amber); border-color: var(--portal-amber-strong); box-shadow: 0 10px 20px rgba(60, 51, 35, .08); transform: translateY(-2px); }
 .cloud-tile-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .cloud-card { display: grid; min-height: 174px; align-content: space-between; gap: 14px; padding: 18px; border: 1px solid var(--portal-line); border-radius: 17px; background: var(--portal-paper); transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
 .cloud-card:hover { transform: translateY(-3px); border-color: #c7bda9; box-shadow: 0 14px 28px rgba(60, 51, 35, .09); }
@@ -219,6 +223,7 @@ button:active, .primary-action:active { transform: translateY(1px) scale(.99); }
   .rail-utility { margin: 0 0 0 4px; border-top: 0; border-left: 1px solid var(--portal-line); padding-top: 10px; }
   .domain-grid, .food-grid { grid-template-columns: 1fr; }
   .item-metadata { float: none; width: 100%; margin: 24px 0; }
+  .intent-links { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 620px) {
   .workspace-topbar { display: block; padding-bottom: 12px; }

@@ -172,6 +172,21 @@ def test_home_uses_semantic_svg_cloud_icons_and_real_previews(portal_setup):
     assert "研究一個主題" in html
 
 
+def test_home_hero_prioritizes_title_and_action_cards(portal_setup):
+    client, *_ = portal_setup
+
+    html = client.get("/").get_data(as_text=True)
+
+    assert 'class="workspace-heading home-hero"' in html
+    assert html.index("從你想找的事開始") < html.index('class="intent-links"')
+    assert 'data-intent="research"' in html
+    assert 'data-intent="place"' in html
+    assert 'data-intent="method"' in html
+    assert 'data-intent="related"' in html
+    assert "你的 Second Brain" not in html
+    assert "Second Brain · Kevin&#39;s Brain" in html
+
+
 def test_public_cloud_copy_is_localized_and_consistent_across_home_and_workspace(
     portal_setup,
 ):
