@@ -214,6 +214,38 @@ def test_cloud_workspaces_use_semantic_svg_item_icons(portal_setup):
     assert "◌" not in html and "⌖" not in html and "✦" not in html
 
 
+def test_web3_workspace_has_truthful_sector_cards_and_food_has_map_contract():
+    repository = FakeRepository()
+    repository.items = [
+        item("rwa", cloud_key="web3", concepts=("RWA", "Regulation")),
+        item("dep-in", cloud_key="web3", concepts=("DePIN",)),
+        item(
+            "mapped-food",
+            cloud_key="food",
+            item_type="place",
+            place={"name": "Mapped cafe", "latitude": 25.03, "longitude": 121.54},
+        ),
+        item("unmapped-food", cloud_key="food", item_type="place", place={"name": "Waiting cafe"}),
+    ]
+    app = create_app(
+        dependencies=PortalDependencies(
+            repository, TenantResolver(), SearchService(), AnswerService(False)
+        )
+    )
+    app.config.update(TESTING=True)
+    client = app.test_client()
+
+    web3 = client.get("/cloud/web3").get_data(as_text=True)
+    food = client.get("/cloud/food").get_data(as_text=True)
+
+    assert 'class="sector-card"' in web3
+    assert 'data-sector-count="1"' in web3
+    assert 'id="food-map"' in food
+    assert 'data-map-points=' in food
+    assert "1 可定位 / 1 待補位置" in food
+    assert "待補位置" in food
+
+
 def test_all_routes_resolve_the_mandatory_tenant(portal_setup):
     client, repository, resolver, *_ = portal_setup
     paths = [

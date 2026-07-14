@@ -336,6 +336,7 @@ def _item_card(item: KnowledgeItem) -> dict[str, object]:
         "updated_at": item.updated_at,
         "concepts": item.concepts,
         "place": item.place,
+        "has_coordinates": _place_has_coordinates(item.place),
         "url": url_for("portal.item_detail", source_id=item.source_id),
         "place_url": (
             url_for("portal.place_detail", source_id=item.source_id)
@@ -525,12 +526,14 @@ def _cloud_workspace(
         }
         for concept in concepts
     ]
+    sectors = _sector_views(items, key)
     places = [item for item in items if item.place is not None]
     map_points = _map_points(places)
     return {
         "tabs": tabs,
         "recent": [_item_card(item) for item in items[:6]],
         "concepts": concept_counts,
+        "sectors": sectors,
         "places": [_item_card(item) for item in places],
         "has_coordinates": bool(map_points),
         "map_points": map_points,
@@ -538,6 +541,26 @@ def _cloud_workspace(
         "unlocated_count": len(places) - len(map_points),
         "item_count": len(items),
     }
+
+
+def _sector_views(items: list[KnowledgeItem], key: str) -> list[dict[str, object]]:
+    """Project source-backed concepts into clickable Cloud navigation tiles."""
+    if key != "web3":
+        return []
+    counts: dict[str, int] = {}
+    for item in items:
+        for concept in item.concepts:
+            label = str(concept).strip()
+            if label:
+                counts[label] = counts.get(label, 0) + 1
+    return [
+        {
+            "name": label,
+            "count": count,
+            "url": url_for("portal.search", q=label, cloud=key),
+        }
+        for label, count in sorted(counts.items(), key=lambda value: (-value[1], value[0].casefold()))
+    ]
 
 
 def _place_has_coordinates(place: dict[str, object] | None) -> bool:

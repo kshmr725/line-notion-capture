@@ -13,7 +13,7 @@
   {% if cloud.key == 'web3' %}
   <div class="domain-grid web3-grid">
     <section class="workspace-section" aria-labelledby="sector-title"><div class="section-head"><h2 id="sector-title">賽道地圖</h2><span>依已索引概念整理</span></div>
-      <div id="sector-map" class="sector-map">{% for concept in workspace.concepts %}<a href="{{ concept.url }}"><strong>{{ concept.label }}</strong><small>{{ concept.count }} 筆</small></a>{% else %}<p class="empty-inline">尚未有足夠的研究資料建立賽道地圖。</p>{% endfor %}</div>
+      <div id="sector-map" class="sector-map">{% for sector in workspace.sectors %}<a class="sector-card" data-sector-count="{{ sector.count }}" href="{{ sector.url }}"><strong>{{ sector.name }}</strong><small>{{ sector.count }} 筆</small></a>{% else %}<p class="empty-inline">尚未有足夠的研究資料建立賽道地圖。</p>{% endfor %}</div>
     </section>
     <section class="workspace-section" aria-labelledby="latest-title"><div class="section-head"><h2 id="latest-title">最新研究</h2><span>{{ workspace.item_count }} 筆</span></div>
       <div class="continue-list">{% for item in workspace.recent %}<a class="continue-row" data-source-id="{{ item.source_id }}" href="{{ item.url }}"><span class="row-icon">{{ icon(item.icon_name) }}</span><span class="row-content"><strong>{{ item.title }}</strong><small>{{ item.summary }}</small></span><span>{{ item.updated_at[:10] }}</span></a>{% else %}<p class="empty-inline">尚未索引 Web3 研究。</p>{% endfor %}</div>
@@ -22,10 +22,10 @@
   {% elif cloud.key == 'food' %}
   <section id="food-discovery" class="domain-grid food-grid" aria-labelledby="food-title">
     <div class="food-panel"><div class="section-head"><h2 id="food-title">美食探索</h2><span>{{ workspace.coordinate_count }} 可定位 / {{ workspace.unlocated_count }} 待補位置</span></div>
-      {% if workspace.has_coordinates %}<div id="food-map" class="real-map" aria-label="以已儲存座標呈現的收藏地點地圖">{% for point in workspace.map_points %}<a class="map-marker" data-source-id="{{ point.item.source_id }}" data-latitude="{{ point.latitude }}" data-longitude="{{ point.longitude }}" href="{{ point.item.place_url or point.item.url }}" aria-label="開啟 {{ point.item.place.name or point.item.title }}">{{ loop.index }}</a>{% endfor %}</div>{% else %}<p class="map-fallback">地圖資料不足，改以清單瀏覽。</p>{% endif %}
+      {% if workspace.has_coordinates %}<div id="food-map" class="real-map" data-map-points='{{ workspace.map_points|tojson }}' aria-label="以已儲存座標呈現的收藏地點地圖">{% for point in workspace.map_points %}<a class="map-marker" data-source-id="{{ point.item.source_id }}" data-latitude="{{ point.latitude }}" data-longitude="{{ point.longitude }}" href="{{ point.item.place_url or point.item.url }}" aria-label="開啟 {{ point.item.place.name or point.item.title }}">{{ loop.index }}</a>{% endfor %}</div>{% else %}<p class="map-fallback">地圖資料不足，改以清單瀏覽。</p>{% endif %}
     </div>
     <div class="workspace-section"><div class="section-head"><h2>附近想去</h2><span>依已儲存資料</span></div>
-      <div class="continue-list place-list">{% for item in workspace.places %}<a class="continue-row" data-source-id="{{ item.source_id }}" data-place-source-id="{{ item.source_id }}" href="{{ item.place_url or item.url }}"><span class="row-icon">{{ icon(item.icon_name) }}</span><span class="row-content"><strong>{{ item.place.name or item.title }}</strong><small>{{ item.place.area or item.place.category or '待補位置' }}</small></span><span class="cloud-badge cloud-food">地點</span></a>{% else %}<p class="empty-inline">尚未有含地點資料的筆記。</p>{% endfor %}</div>
+      <div class="continue-list place-list">{% for item in workspace.places %}<a class="continue-row" data-source-id="{{ item.source_id }}" data-place-source-id="{{ item.source_id }}" href="{{ item.place_url or item.url }}"><span class="row-icon">{{ icon(item.icon_name) }}</span><span class="row-content"><strong>{{ item.place.name or item.title }}</strong><small>{% if item.has_coordinates %}{{ item.place.area or item.place.category or '已定位' }}{% else %}待補位置{% endif %}</small></span><span class="cloud-badge cloud-food">地點</span></a>{% else %}<p class="empty-inline">尚未有含地點資料的筆記。</p>{% endfor %}</div>
     </div>
   </section>
   {% else %}

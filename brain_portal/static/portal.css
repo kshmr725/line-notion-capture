@@ -106,6 +106,8 @@ button:active, .primary-action:active { transform: translateY(1px) scale(.99); }
 .web3-grid > .workspace-section + .workspace-section { padding-left: 4px; }
 .sector-map { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .sector-map a { display: grid; gap: 4px; min-height: 76px; align-content: start; padding: 10px 0 12px; border-bottom: 3px solid var(--portal-amber-strong); }
+.sector-card { display: grid; gap: 4px; min-height: 76px; align-content: start; padding: 10px 0 12px; border-bottom: 3px solid var(--portal-amber-strong); }
+.sector-card:hover strong { color: var(--portal-amber-strong); }
 .sector-map a:hover strong { color: var(--portal-amber-strong); }
 .sector-map small { color: var(--portal-muted); }
 .empty-inline { color: var(--portal-muted); padding: 12px 0; }
