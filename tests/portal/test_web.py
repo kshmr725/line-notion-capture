@@ -709,6 +709,8 @@ def test_food_workspace_renders_only_real_coordinate_map_markers():
 
     assert 'id="food-map"' in html
     assert 'data-source-id="food-place"' in html
+    assert 'data-latitude="25.03"' in html
+    assert "1 可定位 / 0 待補位置" in html
     assert "地圖資料不足" not in html
 
 

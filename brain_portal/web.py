@@ -530,6 +530,8 @@ def _cloud_workspace(
         "places": [_item_card(item) for item in places],
         "has_coordinates": bool(map_points),
         "map_points": map_points,
+        "coordinate_count": len(map_points),
+        "unlocated_count": len(places) - len(map_points),
         "item_count": len(items),
     }
 
@@ -559,15 +561,11 @@ def _map_points(items: list[KnowledgeItem]) -> list[dict[str, object]]:
         )
     if not raw:
         return []
-    min_lat, max_lat = min(point[1] for point in raw), max(point[1] for point in raw)
-    min_lon, max_lon = min(point[2] for point in raw), max(point[2] for point in raw)
-    latitude_span = max(max_lat - min_lat, 1.0)
-    longitude_span = max(max_lon - min_lon, 1.0)
     return [
         {
             "item": card,
-            "x": round(15 + 70 * (longitude - min_lon) / longitude_span, 2),
-            "y": round(85 - 70 * (latitude - min_lat) / latitude_span, 2),
+            "latitude": latitude,
+            "longitude": longitude,
         }
         for card, latitude, longitude in raw
     ]
