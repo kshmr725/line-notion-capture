@@ -186,9 +186,15 @@ def _get_or_create_user(connection, email: str) -> str:
         return row["user_id"]
     user_id = secrets.token_hex(16)
     connection.execute(
-        "INSERT INTO users (user_id, email) VALUES (?, ?)", (user_id, email)
+        """
+        INSERT INTO users (user_id, email) VALUES (?, ?)
+        ON CONFLICT (email) DO NOTHING
+        """,
+        (user_id, email),
     )
-    return user_id
+    return connection.execute(
+        "SELECT user_id FROM users WHERE email = ?", (email,)
+    ).fetchone()["user_id"]
 
 
 def _consume_magic_link_token(
@@ -198,21 +204,25 @@ def _consume_magic_link_token(
     connection = portal_connect(repository.path)
     try:
         with connection:
-            row = connection.execute(
+            now_iso = _now_iso(clock)
+            # Atomic claim: the WHERE clause folds the "unused" and
+            # "not expired" checks into the same statement that marks the
+            # token used, so two concurrent verifications of the same token
+            # cannot both succeed (a separate SELECT-then-UPDATE would race).
+            cursor = connection.execute(
                 """
-                SELECT user_id, expires_at, used_at FROM magic_link_tokens
-                WHERE token_hash = ?
+                UPDATE magic_link_tokens
+                SET used_at = ?
+                WHERE token_hash = ? AND used_at IS NULL AND expires_at >= ?
                 """,
+                (now_iso, token_hash, now_iso),
+            )
+            if cursor.rowcount == 0:
+                return None
+            row = connection.execute(
+                "SELECT user_id FROM magic_link_tokens WHERE token_hash = ?",
                 (token_hash,),
             ).fetchone()
-            if row is None or row["used_at"] is not None:
-                return None
-            if _parse_iso(row["expires_at"]) < clock():
-                return None
-            connection.execute(
-                "UPDATE magic_link_tokens SET used_at = ? WHERE token_hash = ?",
-                (_now_iso(clock), token_hash),
-            )
             user_id = row["user_id"]
             _ensure_tenant_for_user(connection, user_id)
             session_id = secrets.token_urlsafe(32)
@@ -249,7 +259,11 @@ def _ensure_tenant_for_user(connection, user_id: str) -> None:
         (tenant_id, "我的 Brain Cloud"),
     )
     connection.execute(
-        "INSERT INTO tenant_memberships (tenant_id, user_id, role) VALUES (?, ?, 'owner')",
+        """
+        INSERT INTO tenant_memberships (tenant_id, user_id, role)
+        VALUES (?, ?, 'owner')
+        ON CONFLICT (tenant_id, user_id) DO NOTHING
+        """,
         (tenant_id, user_id),
     )
 

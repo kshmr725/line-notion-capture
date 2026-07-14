@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -7,6 +8,7 @@ from flask import Flask
 
 from brain_portal.auth import (
     NullMailTransport,
+    _consume_magic_link_token,
     create_auth_blueprint,
     create_authenticated_tenant_resolver,
     resolve_principal,
@@ -154,6 +156,41 @@ def test_magic_link_verify_creates_a_session_and_is_single_use(
 
     second = client.get(f"/auth/verify?token={token}")
     assert second.status_code == 400
+
+
+def test_concurrent_verification_of_the_same_token_creates_only_one_session(
+    settings, repository, transport, clock
+):
+    _invite(repository, "friend@example.com")
+    app = Flask(__name__)
+    app.register_blueprint(
+        create_auth_blueprint(settings, repository, now=clock, mail_transport=transport)
+    )
+    app.config.update(TESTING=True)
+    client = app.test_client()
+    _request_magic_link(client, "friend@example.com")
+    _, verify_url = transport.sent[0]
+    token = verify_url.split("token=", 1)[1]
+
+    results: list[str | None] = []
+    barrier = threading.Barrier(2)
+
+    def race() -> None:
+        barrier.wait()
+        results.append(_consume_magic_link_token(settings, repository, token, clock))
+
+    threads = [threading.Thread(target=race) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    successes = [session_id for session_id in results if session_id is not None]
+    assert len(successes) == 1
+    connection = portal_connect(repository.path)
+    session_count = connection.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
+    connection.close()
+    assert session_count == 1
 
 
 def test_magic_link_verify_rejects_an_expired_token(
