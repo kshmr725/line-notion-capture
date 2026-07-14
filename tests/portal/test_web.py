@@ -172,6 +172,58 @@ def test_home_uses_semantic_svg_cloud_icons_and_real_previews(portal_setup):
     assert "研究一個主題" in html
 
 
+def test_public_cloud_copy_is_localized_and_consistent_across_home_and_workspace(
+    portal_setup,
+):
+    client, *_ = portal_setup
+
+    home = client.get("/").get_data(as_text=True)
+    web3 = client.get("/cloud/web3").get_data(as_text=True)
+    food = client.get("/cloud/food").get_data(as_text=True)
+    ai = client.get("/cloud/ai").get_data(as_text=True)
+
+    assert "用賽道、專案與研究報告，快速看懂 Web3 商業機會。" in home
+    assert "用賽道、專案與研究報告，快速看懂 Web3 商業機會。" in web3
+    assert "用地圖、區域與情境，快速找到想去的店。" in home
+    assert "用地圖、區域與情境，快速找到想去的店。" in food
+    assert "用工具、Agent 與工作流，快速重用自動化方法。" in home
+    assert "用工具、Agent 與工作流，快速重用自動化方法。" in ai
+    assert "Review an active thesis" not in web3
+    assert "Find a quiet dinner" not in food
+    assert "Build reliable agents" not in ai
+    assert ">AI 自動化</span>" in home
+
+
+def test_recent_cards_use_reader_facing_summary_for_place_facts():
+    repository = FakeRepository()
+    repository.items = [
+        item(
+            "coffee-place",
+            cloud_key="food",
+            item_type="place",
+            place={"name": "Coffee Smoke", "category": "咖啡廳"},
+            summary=(
+                "⭐ 評價：4.7（Google Maps，643 則） 📍 地址：彰化市永樂街199號 "
+                "🕒 時間：13:30–22:00（週四公休） 💰 價位/特色：$200–400／老屋咖啡"
+            ),
+        )
+    ]
+    app = create_app(
+        dependencies=PortalDependencies(
+            repository, TenantResolver(), SearchService(), AnswerService(False)
+        )
+    )
+    app.config.update(TESTING=True)
+
+    html = app.test_client().get("/").get_data(as_text=True)
+
+    assert "評價 4.7（Google Maps，643 則） · 地址 彰化市永樂街199號" in html
+    assert "⭐" not in html
+    assert "📍" not in html
+    assert "🕒" not in html
+    assert "💰" not in html
+
+
 def test_warm_token_contract_and_home_card_hierarchy(portal_setup):
     client, *_ = portal_setup
 
@@ -194,7 +246,7 @@ def test_cloud_views_use_domain_specific_data_backed_workspaces(portal_setup):
     ai_html = client.get("/cloud/ai").get_data(as_text=True)
 
     assert 'id="sector-map"' in web3_html
-    assert 'href="/search?q=%E8%B3%BD%E9%81%93%E7%B8%BD%E8%A6%BD&amp;cloud=web3"' in web3_html
+    assert 'href="/search?q=%E7%9C%8B%E8%B3%BD%E9%81%93&amp;cloud=web3"' in web3_html
     assert 'id="food-discovery"' in food_html
     assert "地圖資料不足，改以清單瀏覽" in food_html
     assert 'id="ai-workspace"' in ai_html
@@ -348,7 +400,10 @@ def test_reader_cards_strip_source_markup_from_summaries():
         item("markup", body="**Evidence**", cloud_key="ai")
     ]
     repository.items[0] = KnowledgeItem(
-        **{**repository.items[0].__dict__, "summary": "Useful **summary**<br>with a line"}
+        **{
+            **repository.items[0].__dict__,
+            "summary": "Useful **summary**<br>with a [[MCP|model protocol]] link #agent",
+        }
     )
     app = create_app(
         dependencies=PortalDependencies(
@@ -359,9 +414,11 @@ def test_reader_cards_strip_source_markup_from_summaries():
 
     html = app.test_client().get("/").get_data(as_text=True)
 
-    assert "Useful summary with a line" in html
+    assert "Useful summary with a model protocol link agent" in html
     assert "<br>" not in html
     assert "**summary**" not in html
+    assert "[[MCP" not in html
+    assert "#agent" not in html
 
 
 def test_item_reader_renders_markdown_body_without_source_syntax():
@@ -396,7 +453,7 @@ def test_workspace_navigation_uses_task_language_instead_of_schema_terms(portal_
     ai = client.get("/cloud/ai").get_data(as_text=True)
 
     assert 'data-nav-group="clouds"' in home
-    assert "賽道總覽" in web3 and "找專案" in web3 and "讀研究" in web3
+    assert "看賽道" in web3 and "找專案" in web3 and "讀報告" in web3
     assert "附近想去" in food and "按區域找" in food
     assert "找工具" in ai and "重用工作流" in ai
     assert "Sector" not in web3 and "Project" not in web3 and "Thesis" not in web3
@@ -552,7 +609,7 @@ def test_cloud_has_domain_filters_and_featured_paths(portal_setup):
     assert "找工具" in html
     assert "重用工作流" in html
     assert 'id="featured-paths"' in html
-    assert "Build reliable agents" in html
+    assert "建立可靠的 Agent" in html
     assert 'data-source-id="ai-agent"' in html
 
 
@@ -563,7 +620,7 @@ def test_place_and_sync_pages_use_reader_facing_states(portal_setup):
     sync_html = client.get("/sync").get_data(as_text=True)
 
     assert "Da&#39;an" in place_html
-    assert "Open source note" in place_html
+    assert "查看原始筆記" in place_html
     assert 'id="sync-status"' in sync_html
     assert "尚未索引" in sync_html
 
@@ -770,7 +827,7 @@ def test_item_and_place_allow_only_trusted_canonical_actions(
 
     assert action in item_html
     assert canonical_ref.replace("&", "&amp;") in item_html
-    assert "Open source note" in place_html
+    assert "查看原始筆記" in place_html
     assert canonical_ref.replace("&", "&amp;") in place_html
 
 
@@ -977,7 +1034,7 @@ def test_place_builds_bounded_encoded_google_maps_search_action():
     assert maps_href.group(1).startswith("https://maps.google.com/?q=Cafe+%26+Bar")
     assert "1+Main+St+%2F+Taipei" in maps_href.group(1)
     assert "SECRET_TAIL" not in maps_href.group(1)
-    assert "Search in Google Maps" in html
+    assert "在 Google 地圖查看" in html
 
 
 def test_place_without_name_or_address_hides_maps_action():
@@ -993,7 +1050,7 @@ def test_place_without_name_or_address_hides_maps_action():
     html = app.test_client().get("/place/map-place").get_data(as_text=True)
 
     assert "maps.google.com" not in html
-    assert "Search in Google Maps" not in html
+    assert "在 Google 地圖查看" not in html
 
 
 def test_over_limit_search_query_returns_designed_400_without_services(portal_setup):

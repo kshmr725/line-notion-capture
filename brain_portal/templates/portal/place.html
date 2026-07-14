@@ -15,7 +15,7 @@
     {% else %}
     <p class="empty-inline">這筆地點目前還沒有評價、地址或營業資訊。</p>
     {% endif %}
-    {% if item.canonical_action %}<a class="primary-action" data-canonical-action="Open source note" href="{{ item.canonical_action.url }}">查看原始筆記</a>{% endif %}
+    {% if item.canonical_action %}<a class="primary-action" data-canonical-action="查看原始筆記" href="{{ item.canonical_action.url }}">查看原始筆記</a>{% endif %}
     {% if item.maps_action %}<a class="primary-action secondary-action" href="{{ item.maps_action.url }}">{{ item.maps_action.label }}</a>{% endif %}
   </section>
 </article>

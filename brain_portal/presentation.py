@@ -70,9 +70,44 @@ def public_type_label(item_type: str) -> str:
 def clean_display_text(value: str) -> str:
     """Remove source markup from short reader-facing labels and summaries."""
     text = unescape(str(value or ""))
+    text = re.sub(r"\[\[([^\]|]+)\|([^\]]+)\]\]", r"\2", text)
+    text = re.sub(r"\[\[([^\]]+)\]\]", r"\1", text)
+    text = re.sub(r"(?m)^\s*#{1,6}\s+", "", text)
+    text = re.sub(r"(?<!\w)#([\w\u4e00-\u9fff-]+)", r"\1", text)
     text = re.sub(r"<[^>]+>", " ", text)
     text = re.sub(r"[*_~`]+", "", text)
     return re.sub(r"\s+", " ", text).strip()
+
+
+def reader_summary(
+    summary: str,
+    facts: list[dict[str, str]] | None = None,
+    *,
+    limit: int = 160,
+) -> str:
+    """Return one predictable, reader-facing line for list/card contexts.
+
+    Source notes can use Markdown, emoji, or a long prose paragraph.  Cards
+    need a short subtitle with the same visual grammar everywhere, while the
+    full note remains available on the detail page.
+    """
+    if facts:
+        by_label = {fact["label"]: fact["value"] for fact in facts}
+        parts = [
+            f"{label} {by_label[label]}"
+            for label in ("評價", "地址", "營業時間", "價位／特色")
+            if by_label.get(label)
+        ]
+        if parts:
+            text = " · ".join(parts)
+        else:
+            text = clean_display_text(summary)
+    else:
+        text = clean_display_text(summary)
+    text = re.sub(r"^(?:[-*•]\s*)", "", text).strip()
+    if len(text) <= limit:
+        return text
+    return text[: max(1, limit - 1)].rstrip() + "…"
 
 
 def render_markdown_body(body: str) -> Markup:

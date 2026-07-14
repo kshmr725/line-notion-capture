@@ -24,6 +24,7 @@ from brain_portal.presentation import (
     place_facts,
     public_cloud_label,
     public_type_label,
+    reader_summary,
     render_markdown_body,
 )
 from brain_portal.search import SearchResults
@@ -70,30 +71,30 @@ CLOUDS = (
         "name": "Web3 商業研究",
         "short_name": "Web3",
         "icon_name": "orbit",
-        "description": "賽道、專案與概念 Wiki。",
+        "description": "用賽道、專案與研究報告，快速看懂 Web3 商業機會。",
         "filters": ("Sector", "Project", "Thesis", "Status"),
-        "filter_labels": ("賽道總覽", "找專案", "讀研究", "看狀態"),
-        "paths": ("Review an active thesis", "Compare adjacent projects"),
+        "filter_labels": ("看賽道", "找專案", "讀報告", "看進度"),
+        "paths": ("研究一個主題", "比較相鄰專案"),
     },
     {
         "key": "food",
         "name": "美食與咖啡地圖",
         "short_name": "美食地圖",
         "icon_name": "map-pin",
-        "description": "地點、想去清單與使用情境。",
+        "description": "用地圖、區域與情境，快速找到想去的店。",
         "filters": ("Area", "Category", "Visit status", "Use case"),
-        "filter_labels": ("附近想去", "按類型找", "已去過", "按區域找"),
-        "paths": ("Find a quiet dinner", "Plan by neighborhood"),
+        "filter_labels": ("看地圖", "按類型找", "已去過", "按區域找"),
+        "paths": ("找安靜的晚餐", "依區域規劃"),
     },
     {
         "key": "ai",
         "name": "AI 自動化",
         "short_name": "AI 自動化",
         "icon_name": "workflow",
-        "description": "工具、Agent 與可重用的工作流。",
+        "description": "用工具、Agent 與工作流，快速重用自動化方法。",
         "filters": ("Tool", "Agent", "MCP", "Workflow", "Reliability"),
         "filter_labels": ("找工具", "找 Agent", "找 MCP", "重用工作流", "看穩定性"),
-        "paths": ("Build reliable agents", "Connect tools with MCP"),
+        "paths": ("建立可靠的 Agent", "用 MCP 串接工具"),
     },
 )
 
@@ -347,6 +348,7 @@ def _item_card(item: KnowledgeItem) -> dict[str, object]:
         "source_id": item.source_id,
         "title": item.title,
         "summary": clean_display_text(item.summary),
+        "display_summary": reader_summary(item.summary, facts),
         "cloud_key": item.cloud_key,
         "cloud_label": public_cloud_label(item.cloud_key),
         "item_type": item.item_type,
@@ -431,7 +433,7 @@ def _maps_action(place: dict[str, object] | None) -> dict[str, str] | None:
         return None
     return {
         "url": "https://maps.google.com/?" + urlencode({"q": " ".join(parts)}),
-        "label": "Search in Google Maps",
+        "label": "在 Google 地圖查看",
     }
 
 

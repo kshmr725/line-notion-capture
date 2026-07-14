@@ -26,8 +26,8 @@
       {% for item in recent %}
       <a class="continue-row knowledge-card" data-source-id="{{ item.source_id }}" href="{{ item.url }}">
         <span class="row-icon">{{ icon(item.icon_name) }}</span>
-        <span class="row-content"><strong>{{ item.title }}</strong><small>{{ item.summary }}</small></span>
-        <span class="cloud-badge cloud-{{ item.cloud_key }}">{{ item.cloud_key }}</span>
+        <span class="row-content"><strong>{{ item.title }}</strong><small>{{ item.display_summary }}</small></span>
+        <span class="cloud-badge cloud-{{ item.cloud_key }}">{{ item.cloud_label }}</span>
       </a>
       {% endfor %}
     </div>

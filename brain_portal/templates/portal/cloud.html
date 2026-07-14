@@ -16,7 +16,7 @@
       <div id="sector-map" class="sector-map">{% for sector in workspace.sectors %}<a class="sector-card" data-sector-count="{{ sector.count }}" href="{{ sector.url }}"><strong>{{ sector.name }}</strong><small>{{ sector.count }} 筆</small></a>{% else %}<p class="empty-inline">尚未有足夠的研究資料建立賽道地圖。</p>{% endfor %}</div>
     </section>
     <section class="workspace-section" aria-labelledby="latest-title"><div class="section-head"><h2 id="latest-title">最新研究</h2><span>{{ workspace.item_count }} 筆</span></div>
-      <div class="continue-list">{% for item in workspace.recent %}<a class="continue-row" data-source-id="{{ item.source_id }}" href="{{ item.url }}"><span class="row-icon">{{ icon(item.icon_name) }}</span><span class="row-content"><strong>{{ item.title }}</strong><small>{{ item.summary }}</small></span><span>{{ item.updated_at[:10] }}</span></a>{% else %}<p class="empty-inline">尚未索引 Web3 研究。</p>{% endfor %}</div>
+      <div class="continue-list">{% for item in workspace.recent %}<a class="continue-row" data-source-id="{{ item.source_id }}" href="{{ item.url }}"><span class="row-icon">{{ icon(item.icon_name) }}</span><span class="row-content"><strong>{{ item.title }}</strong><small>{{ item.display_summary }}</small></span><span>{{ item.updated_at[:10] }}</span></a>{% else %}<p class="empty-inline">尚未索引 Web3 研究。</p>{% endfor %}</div>
     </section>
   </div>
   {% elif cloud.key == 'food' %}
@@ -31,9 +31,9 @@
   {% else %}
   <section id="ai-workspace" class="domain-grid ai-grid" aria-labelledby="ai-title">
     <div class="workspace-section"><div class="section-head"><h2 id="ai-title">可重用的方法</h2><span>{{ workspace.item_count }} 筆</span></div>
-      <div class="continue-list">{% for item in workspace.recent %}<a class="continue-row" data-source-id="{{ item.source_id }}" href="{{ item.url }}"><span class="row-icon">{{ icon(item.icon_name) }}</span><span class="row-content"><strong>{{ item.title }}</strong><small>{{ item.item_type_label }} · {{ item.summary }}</small></span><span class="cloud-badge cloud-ai">{{ item.item_type_label }}</span></a>{% else %}<p class="empty-inline">尚未索引 AI 自動化筆記。</p>{% endfor %}</div>
+      <div class="continue-list">{% for item in workspace.recent %}<a class="continue-row" data-source-id="{{ item.source_id }}" href="{{ item.url }}"><span class="row-icon">{{ icon(item.icon_name) }}</span><span class="row-content"><strong>{{ item.title }}</strong><small>{{ item.display_summary }}</small></span><span class="cloud-badge cloud-ai">{{ item.item_type_label }}</span></a>{% else %}<p class="empty-inline">尚未索引 AI 自動化筆記。</p>{% endfor %}</div>
     </div>
-    <aside class="workspace-section ai-guide"><h2>如何使用</h2><p>先從工具、Agent、MCP 或 Workflow 進入，再用搜尋把相關概念串起來。</p></aside>
+    <aside class="workspace-section ai-guide"><h2>如何使用</h2><p>先從工具、Agent、MCP 或工作流進入，再用搜尋把相關主題串起來。</p></aside>
   </section>
   {% endif %}
 
@@ -41,6 +41,6 @@
   <section id="related-concepts" class="workspace-section" aria-labelledby="concept-title"><div class="section-head"><h2 id="concept-title">延伸主題</h2><span>跨 Cloud 一起看</span></div><div class="concept-row">{% for concept in workspace.concepts %}<a href="{{ concept.url }}">{{ concept.label }}</a>{% endfor %}</div></section>
   {% endif %}
 
-  <section id="featured-paths" class="workspace-section" aria-labelledby="path-title"><div class="section-head"><h2 id="path-title">開始探索</h2><span>實際搜尋入口</span></div><div class="path-list">{% for path in cloud.paths %}<a href="{{ url_for('portal.search', q=path, cloud=cloud.key) }}"><strong>{{ path }}</strong><span aria-hidden="true">→</span></a>{% endfor %}</div></section>
+  <section id="featured-paths" class="workspace-section" aria-labelledby="path-title"><div class="section-head"><h2 id="path-title">開始探索</h2><span>從一個目標開始</span></div><div class="path-list">{% for path in cloud.paths %}<a href="{{ url_for('portal.search', q=path, cloud=cloud.key) }}"><strong>{{ path }}</strong><span aria-hidden="true">→</span></a>{% endfor %}</div></section>
 </div>
 {% endblock %}
