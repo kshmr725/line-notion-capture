@@ -29,8 +29,30 @@ def test_food_note_filename_becomes_an_honest_place_projection(tmp_path):
 
     assert document.metadata["item_type"] == "place"
     assert document.metadata["place"] == {
-        "name": "Cozzi Café 敦南店",
+        "name": "Cozzi",
         "category": "咖啡廳",
+    }
+
+
+def test_food_frontmatter_exposes_valid_coordinates_and_clean_title(tmp_path):
+    root = tmp_path / "Kevin_Brain"
+    note = root / "71_Food_美食與咖啡地圖" / "2026-06-12 [咖啡店] Cozzi Café.md"
+    note.parent.mkdir(parents=True)
+    note.write_text(
+        "---\nlocation: [25.033, 121.543]\naddress: 台北市\n---\n"
+        "# [咖啡店] Cozzi Café\n",
+        encoding="utf-8",
+    )
+
+    [document] = list(ObsidianConnector(root).iter_documents("kevin"))
+
+    assert document.title == "Cozzi Café"
+    assert document.metadata["place"] == {
+        "name": "Cozzi Café",
+        "category": "咖啡廳",
+        "address": "台北市",
+        "latitude": 25.033,
+        "longitude": 121.543,
     }
 
 
@@ -77,7 +99,9 @@ def test_connector_revision_is_the_sha256_of_file_bytes(tmp_path):
 
     [doc] = list(ObsidianConnector(root).iter_documents("kevin"))
 
-    assert doc.source_revision == hashlib.sha256(content).hexdigest()
+    assert doc.source_revision == hashlib.sha256(
+        content + b"\0portal-normalizer-v2"
+    ).hexdigest()
     assert doc.source_type == "obsidian"
-    assert doc.title == "Cafe"
+    assert doc.title == "Café"
     assert doc.cloud_key == "food"

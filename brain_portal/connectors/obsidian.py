@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import hashlib
-import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Union
 
 from brain_portal.models import SourceDocument
+from brain_portal.presentation import food_place_metadata, parse_obsidian_metadata
 
 
 PathLike = Union[str, Path]
@@ -16,6 +16,7 @@ FOLDER_CLOUDS = {
     "50_Tech_AI自動化": "ai",
     "71_Food_美食與咖啡地圖": "food",
 }
+NORMALIZER_VERSION = b"portal-normalizer-v2"
 
 
 class ObsidianConnector:
@@ -54,27 +55,24 @@ class ObsidianConnector:
                 source_id=source_id,
                 source_type=self.source_type,
                 canonical_ref=f"obsidian://{source_id}",
-                title=candidate.stem,
+                title=_source_title(relative.parts[0], content.decode("utf-8"), candidate.stem),
                 body=content.decode("utf-8"),
                 cloud_key=FOLDER_CLOUDS[relative.parts[0]],
-                source_revision=hashlib.sha256(content).hexdigest(),
+                source_revision=hashlib.sha256(content + b"\0" + NORMALIZER_VERSION).hexdigest(),
                 updated_at=datetime.fromtimestamp(
                     stat.st_mtime, tz=timezone.utc
                 ).isoformat(),
-                metadata=_source_metadata(relative.parts[0], candidate.stem),
+                metadata=_source_metadata(relative.parts[0], content.decode("utf-8"), candidate.stem),
             )
 
 
-def _source_metadata(folder: str, title: str) -> dict[str, object]:
-    if FOLDER_CLOUDS.get(folder) != "food":
-        return {}
-    place_name = re.sub(r"^\d{4}-\d{2}-\d{2}\s*", "", title).strip()
-    category_match = re.search(r"\[([^\]]+)\]", place_name)
-    category = category_match.group(1).strip() if category_match else ""
-    if category_match:
-        place_name = (place_name[: category_match.start()] + place_name[category_match.end() :]).strip()
-    place_name = re.sub(r"^[^\w\u4e00-\u9fff]+", "", place_name).strip()
-    place: dict[str, object] = {"name": place_name or title}
-    if category:
-        place["category"] = category
-    return {"item_type": "place", "place": place}
+def _source_title(folder: str, body: str, title: str) -> str:
+    if FOLDER_CLOUDS.get(folder) == "food":
+        return str(food_place_metadata(body, title)["display_title"])
+    return str(parse_obsidian_metadata(body, title)["title"])
+
+
+def _source_metadata(folder: str, body: str, title: str) -> dict[str, object]:
+    if FOLDER_CLOUDS.get(folder) == "food":
+        return food_place_metadata(body, title)
+    return {}
