@@ -246,6 +246,34 @@ def test_web3_workspace_has_truthful_sector_cards_and_food_has_map_contract():
     assert "待補位置" in food
 
 
+def test_food_map_loads_leaflet_and_has_keyboard_selectable_place_rows():
+    repository = FakeRepository()
+    repository.items = [
+        item(
+            "mapped-food",
+            cloud_key="food",
+            item_type="place",
+            place={"name": "Mapped cafe", "latitude": 25.03, "longitude": 121.54},
+        )
+    ]
+    app = create_app(
+        dependencies=PortalDependencies(
+            repository, TenantResolver(), SearchService(), AnswerService(False)
+        )
+    )
+    app.config.update(TESTING=True)
+    client = app.test_client()
+
+    html = client.get("/cloud/food").get_data(as_text=True)
+    javascript = client.get("/portal-static/portal.js").get_data(as_text=True)
+
+    assert "leaflet.css" in html
+    assert "unpkg.com/leaflet@1.9.4" in html
+    assert "initFoodMap" in javascript
+    assert "brain-cloud:place-selected" in javascript
+    assert 'data-place-source-id="mapped-food"' in html
+
+
 def test_all_routes_resolve_the_mandatory_tenant(portal_setup):
     client, repository, resolver, *_ = portal_setup
     paths = [

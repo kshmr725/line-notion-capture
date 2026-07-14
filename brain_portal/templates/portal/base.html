@@ -7,6 +7,10 @@
   <meta name="theme-color" content="#f4f2ed">
   <title>{{ page_title }} · Brain Cloud</title>
   <link rel="stylesheet" href="{{ url_for('portal.static', filename='portal.css') }}">
+  {% if active_cloud_key == 'food' %}
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIINfQ3n4Zp4fQJ0eJ5O7g8g5fK5wQ8W3tM=" crossorigin="">
+  <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  {% endif %}
   <script defer src="{{ url_for('portal.static', filename='portal.js') }}"></script>
 </head>
 <body>

@@ -122,6 +122,10 @@ button:active, .primary-action:active { transform: translateY(1px) scale(.99); }
 .food-panel { min-width: 0; }
 .real-map { position: relative; min-height: 390px; overflow: hidden; border: 1px solid var(--portal-line); border-radius: 16px; background: #e7e5de; }
 .real-map::before { content: "OpenStreetMap"; position: absolute; right: 8px; bottom: 6px; z-index: 1; padding: 2px 5px; background: rgba(255, 253, 248, .85); color: var(--portal-muted); font-size: .68rem; }
+.real-map[data-map-ready="true"] { background: var(--portal-paper); }
+.portal-map-pin { width: 24px !important; height: 24px !important; border: 0; background: transparent; }
+.portal-map-pin span { display: block; width: 18px; height: 18px; border: 2px solid #fff; border-radius: 50% 50% 50% 0; background: var(--portal-amber-strong); box-shadow: 0 3px 8px rgba(89, 56, 24, .3); transform: rotate(-45deg); }
+.portal-map-pin.is-selected span { background: var(--portal-ink); }
 .map-marker { display: grid; place-items: center; width: 32px; min-height: 32px; padding: 0; border: 2px solid #fff; border-radius: 50% 50% 50% 0; background: var(--portal-amber-strong); color: #fff; font-size: .7rem; transform: rotate(-45deg); box-shadow: 0 4px 10px rgba(89, 56, 24, .23); }
 .map-marker::first-line { transform: rotate(45deg); }
 .map-marker:hover, .map-marker.is-selected { background: var(--portal-ink); }
