@@ -8,12 +8,31 @@
   {% endif %}
   {% if not state or state.status == 'needs_source' %}
   <p>你的帳號已建立。接下來連接一個來源，我們就會開始幫你整理成 Brain Cloud。</p>
-  {% if oauth_configured %}
+  {% if has_notion_connection %}
+  <a class="primary-action" href="{{ url_for('auth.connect_source_page') }}">選擇 Notion 資料庫</a>
+  {% elif oauth_configured %}
   <a class="primary-action" href="{{ url_for('auth.oauth_notion_start') }}">連接 Notion</a>
   {% else %}
   <p class="auth-status" role="status">連接 Notion（即將推出）</p>
   {% endif %}
-  {% elif state.status in ('proposed', 'confirmed', 'indexing') %}
+  {% elif state.status == 'proposed' and proposal %}
+  <p>我們依照現有分類把你的內容分成以下幾組，確認後就會開始建立 Brain Cloud。</p>
+  <ul class="proposal-groups">
+    {% for group in proposal %}
+    <li>
+      <strong>{{ group.label }}</strong>
+      <span>{{ group.source_ids|length }} 筆{% if group.confidence < 1.0 %}（待確認）{% endif %}</span>
+      {% if group.sample_titles %}
+      <p class="auth-status" role="status">{{ group.sample_titles|join('、') }}</p>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  <form method="post" action="{{ url_for('auth.confirm_onboarding') }}">
+    <input type="hidden" name="proposal_id" value="{{ proposal_id }}">
+    <button type="submit" class="primary-action">接受並建立</button>
+  </form>
+  {% elif state.status in ('confirmed', 'indexing') %}
   <p>我們正在讀取你的來源並建立分類，這通常需要一到十分鐘。</p>
   {% elif state.status == 'ready' %}
   <p>你的 Brain Cloud 已經可以使用了。</p>

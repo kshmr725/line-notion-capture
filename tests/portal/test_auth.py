@@ -633,3 +633,179 @@ def test_oauth_callback_route_completes_the_flow(
     ).fetchone()
     connection.close()
     assert row["status"] == "active"
+
+
+def _connect_notion(client, repository, transport, monkeypatch, user_id: str) -> None:
+    monkeypatch.setattr(
+        "brain_portal.auth.requests.post", lambda *a, **k: _fake_token_response()
+    )
+    start_response = client.get("/oauth/notion/start", follow_redirects=False)
+    state = parse_qs(urlparse(start_response.headers["Location"]).query)["state"][0]
+    client.get(f"/oauth/notion/callback?state={state}&code=auth-code")
+
+
+class FakeNotionResponse:
+    def __init__(self, payload: dict):
+        self.payload = payload
+        self.status_code = 200
+
+    def raise_for_status(self) -> None:
+        return None
+
+    def json(self) -> dict:
+        return self.payload
+
+
+def _notion_page(page_id: str, title: str, cloud: str) -> dict:
+    return {
+        "id": page_id,
+        "url": f"https://www.notion.so/{page_id}",
+        "last_edited_time": "2026-07-14T12:00:00.000Z",
+        "properties": {
+            "title": {"type": "title", "title": [{"plain_text": title}]},
+            "Summary": {"type": "rich_text", "rich_text": [{"plain_text": "Summary"}]},
+            "Cloud": {"type": "select", "select": {"name": cloud}},
+            "Concepts": {"type": "multi_select", "multi_select": []},
+        },
+    }
+
+
+def _mock_notion_workspace(monkeypatch, pages: list[dict]) -> None:
+    def fake_post(url, **kwargs):
+        return FakeNotionResponse({"results": pages, "has_more": False, "next_cursor": None})
+
+    def fake_get(url, **kwargs):
+        return FakeNotionResponse(
+            {
+                "results": [
+                    {
+                        "type": "paragraph",
+                        "paragraph": {"rich_text": [{"plain_text": "Body text."}]},
+                    }
+                ],
+                "has_more": False,
+                "next_cursor": None,
+            }
+        )
+
+    monkeypatch.setattr("brain_portal.connectors.notion.requests.post", fake_post)
+    monkeypatch.setattr("brain_portal.connectors.notion.requests.get", fake_get)
+
+
+def test_connect_source_page_redirects_anonymous_user_to_login(auth_app):
+    response = auth_app.test_client().get(
+        "/onboarding/connect-source", follow_redirects=False
+    )
+    assert response.status_code in (302, 303)
+    assert "/login" in response.headers["Location"]
+
+
+def test_connect_source_page_redirects_to_onboarding_without_a_notion_connection(
+    auth_app, repository, transport
+):
+    client = auth_app.test_client()
+    _sign_in(client, repository, transport, "friend@example.com")
+
+    response = client.get("/onboarding/connect-source", follow_redirects=False)
+
+    assert response.status_code in (302, 303)
+    assert response.headers["Location"].endswith("/onboarding")
+
+
+def test_connect_source_submit_rejects_a_blank_database_id(
+    auth_app, repository, transport, monkeypatch
+):
+    client = auth_app.test_client()
+    user_id = _sign_in(client, repository, transport, "friend@example.com")
+    _connect_notion(client, repository, transport, monkeypatch, user_id)
+
+    response = client.post(
+        "/onboarding/connect-source", data={"database_id": ""}, follow_redirects=False
+    )
+
+    assert response.status_code in (302, 303)
+    assert "connect-source" in response.headers["Location"]
+
+
+def test_connect_source_submit_builds_a_proposal_and_advances_onboarding(
+    auth_app, repository, transport, monkeypatch
+):
+    client = auth_app.test_client()
+    user_id = _sign_in(client, repository, transport, "friend@example.com")
+    _connect_notion(client, repository, transport, monkeypatch, user_id)
+    _mock_notion_workspace(
+        monkeypatch,
+        [
+            _notion_page("page-1", "Restaking Thesis", "Web3 Research"),
+            _notion_page("page-2", "Untagged Note", "Not A Real Cloud"),
+        ],
+    )
+
+    response = client.post(
+        "/onboarding/connect-source", data={"database_id": "db-1"}, follow_redirects=False
+    )
+
+    assert response.status_code in (302, 303)
+    assert response.headers["Location"].endswith("/onboarding")
+    connection = portal_connect(repository.path)
+    status = connection.execute(
+        "SELECT onboarding_status FROM tenants WHERE tenant_id = ?", (user_id,)
+    ).fetchone()["onboarding_status"]
+    proposal_count = connection.execute(
+        "SELECT COUNT(*) FROM cloud_proposals WHERE tenant_id = ?", (user_id,)
+    ).fetchone()[0]
+    connection.close()
+    assert status == "proposed"
+    assert proposal_count == 1
+
+    onboarding_html = client.get("/onboarding").get_data(as_text=True)
+    assert "Restaking Thesis" in onboarding_html
+    assert "Untagged Note" in onboarding_html
+
+
+def test_confirm_onboarding_indexes_the_proposed_items(
+    auth_app, repository, transport, monkeypatch
+):
+    client = auth_app.test_client()
+    user_id = _sign_in(client, repository, transport, "friend@example.com")
+    _connect_notion(client, repository, transport, monkeypatch, user_id)
+    _mock_notion_workspace(
+        monkeypatch, [_notion_page("page-1", "Restaking Thesis", "Web3 Research")]
+    )
+    client.post("/onboarding/connect-source", data={"database_id": "db-1"})
+    connection = portal_connect(repository.path)
+    proposal_id = connection.execute(
+        "SELECT proposal_id FROM cloud_proposals WHERE tenant_id = ?", (user_id,)
+    ).fetchone()["proposal_id"]
+    connection.close()
+
+    response = client.post(
+        "/onboarding/confirm",
+        data={"proposal_id": proposal_id},
+        follow_redirects=False,
+    )
+
+    assert response.status_code in (302, 303)
+    from brain_portal.db import PortalRepository
+
+    items = PortalRepository(repository.path).list_items(user_id)
+    assert len(items) == 1
+    assert items[0].title == "Restaking Thesis"
+    connection = portal_connect(repository.path)
+    status = connection.execute(
+        "SELECT onboarding_status FROM tenants WHERE tenant_id = ?", (user_id,)
+    ).fetchone()["onboarding_status"]
+    connection.close()
+    assert status == "ready"
+
+
+def test_confirm_onboarding_without_a_proposal_id_redirects_safely(
+    auth_app, repository, transport
+):
+    client = auth_app.test_client()
+    _sign_in(client, repository, transport, "friend@example.com")
+
+    response = client.post("/onboarding/confirm", data={}, follow_redirects=False)
+
+    assert response.status_code in (302, 303)
+    assert response.headers["Location"].endswith("/onboarding")

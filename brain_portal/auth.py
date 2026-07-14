@@ -14,8 +14,16 @@ from flask import Blueprint, Response, redirect, render_template, request, url_f
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 
 from brain_portal.config import PortalSettings
+from brain_portal.connectors.notion import NotionConnector
 from brain_portal.db import portal_connect
+from brain_portal.embeddings import GeminiEmbeddingProvider
 from brain_portal.models import AuthenticatedPrincipal, OnboardingState, TenantContext
+from brain_portal.onboarding import (
+    confirm_clouds,
+    load_proposal,
+    propose_clouds,
+    store_proposal,
+)
 
 
 SESSION_COOKIE_NAME = "brain_cloud_session"
@@ -122,17 +130,96 @@ def create_auth_blueprint(
         if principal is None:
             return redirect(url_for("auth.login_page"))
         state = _onboarding_state_for_user(repository, principal.user_id)
+        status = state.status if state else "needs_source"
+        proposal = None
+        proposal_id = None
+        if status == "proposed":
+            proposal_id, proposal = _latest_proposal(repository, principal.user_id)
         return render_template(
             "portal/onboarding.html",
             page_title="設定 Brain Cloud",
             principal=principal,
             state=state,
-            state_label=_ONBOARDING_LABELS.get(
-                state.status if state else "needs_source", "準備中"
-            ),
+            state_label=_ONBOARDING_LABELS.get(status, "準備中"),
             oauth_configured=_oauth_configured(settings),
             oauth_error=request.args.get("oauth_error") == "1",
+            has_notion_connection=_notion_connection_config(repository, principal.user_id)
+            is not None,
+            proposal=proposal,
+            proposal_id=proposal_id,
         )
+
+    @auth.get("/onboarding/connect-source")
+    def connect_source_page():
+        principal = resolve_principal(settings, repository, clock)
+        if principal is None:
+            return redirect(url_for("auth.login_page"))
+        connection_config = _notion_connection_config(repository, principal.user_id)
+        if connection_config is None:
+            return redirect(url_for("auth.onboarding"))
+        return render_template(
+            "portal/connect_source.html",
+            page_title="選擇 Notion 資料庫",
+            principal=principal,
+            workspace_name=connection_config.get("workspace_name", ""),
+            source_error=request.args.get("source_error") == "1",
+        )
+
+    @auth.post("/onboarding/connect-source")
+    def connect_source_submit():
+        principal = resolve_principal(settings, repository, clock)
+        if principal is None:
+            return redirect(url_for("auth.login_page"))
+        database_id = request.form.get("database_id", "").strip()
+        if not database_id:
+            return redirect(url_for("auth.connect_source_page", source_error="1"))
+        connection_config = _notion_connection_config(repository, principal.user_id)
+        if connection_config is None:
+            return redirect(url_for("auth.onboarding"))
+        try:
+            token = decrypt_source_token(settings, connection_config)
+            connector = NotionConnector(
+                token=token, database_id=database_id, api_version=settings.notion_api_version
+            )
+            documents = list(connector.iter_documents(principal.user_id))
+        except Exception:
+            return redirect(url_for("auth.connect_source_page", source_error="1"))
+        if not documents:
+            return redirect(url_for("auth.connect_source_page", source_error="1"))
+        _remember_database_id(repository, principal.user_id, database_id)
+        proposal = propose_clouds(documents)
+        store_proposal(repository, principal.user_id, proposal, clock)
+        return redirect(url_for("auth.onboarding"))
+
+    @auth.post("/onboarding/confirm")
+    def confirm_onboarding():
+        principal = resolve_principal(settings, repository, clock)
+        if principal is None:
+            return redirect(url_for("auth.login_page"))
+        proposal_id = request.form.get("proposal_id", "").strip()
+        connection_config = _notion_connection_config(repository, principal.user_id)
+        database_id = (connection_config or {}).get("database_id")
+        if not proposal_id or connection_config is None or not database_id:
+            return redirect(url_for("auth.onboarding"))
+        try:
+            token = decrypt_source_token(settings, connection_config)
+            connector = NotionConnector(
+                token=token, database_id=database_id, api_version=settings.notion_api_version
+            )
+            documents = list(connector.iter_documents(principal.user_id))
+        except Exception:
+            return redirect(url_for("auth.onboarding", oauth_error="1"))
+        gemini_key = settings.gemini_api_key.strip()
+        embedder = (
+            GeminiEmbeddingProvider(gemini_key, timeout=settings.ai_timeout_seconds)
+            if gemini_key
+            else None
+        )
+        try:
+            confirm_clouds(repository, principal.user_id, proposal_id, {}, documents, embedder)
+        except ValueError:
+            pass
+        return redirect(url_for("auth.onboarding"))
 
     @auth.get("/oauth/notion/start")
     def oauth_notion_start():
@@ -183,6 +270,71 @@ def _oauth_configured(settings: PortalSettings) -> bool:
         and settings.notion_oauth_redirect_url.strip()
         and settings.token_encryption_key.strip()
     )
+
+
+def _notion_connection_config(repository, tenant_id: str) -> dict | None:
+    connection = portal_connect(repository.path)
+    try:
+        row = connection.execute(
+            """
+            SELECT config_json FROM source_connections
+            WHERE tenant_id = ? AND source_type = 'notion'
+            ORDER BY connection_id
+            LIMIT 1
+            """,
+            (tenant_id,),
+        ).fetchone()
+    finally:
+        connection.close()
+    if row is None:
+        return None
+    return json.loads(row["config_json"])
+
+
+def _remember_database_id(repository, tenant_id: str, database_id: str) -> None:
+    connection = portal_connect(repository.path)
+    try:
+        with connection:
+            row = connection.execute(
+                """
+                SELECT config_json FROM source_connections
+                WHERE tenant_id = ? AND source_type = 'notion'
+                """,
+                (tenant_id,),
+            ).fetchone()
+            if row is None:
+                return
+            config = json.loads(row["config_json"])
+            config["database_id"] = database_id
+            connection.execute(
+                """
+                UPDATE source_connections SET config_json = ?
+                WHERE tenant_id = ? AND source_type = 'notion'
+                """,
+                (json.dumps(config), tenant_id),
+            )
+    finally:
+        connection.close()
+
+
+def _latest_proposal(repository, tenant_id: str):
+    connection = portal_connect(repository.path)
+    try:
+        row = connection.execute(
+            """
+            SELECT proposal_id FROM cloud_proposals
+            WHERE tenant_id = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (tenant_id,),
+        ).fetchone()
+    finally:
+        connection.close()
+    if row is None:
+        return None, None
+    proposal_id = row["proposal_id"]
+    return proposal_id, load_proposal(repository, tenant_id, proposal_id)
 
 
 def begin_notion_oauth(

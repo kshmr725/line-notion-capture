@@ -1,0 +1,19 @@
+{% extends "portal/public_base.html" %}
+{% block content %}
+<div class="auth-panel">
+  <p class="eyebrow">{{ workspace_name }}</p>
+  <h1>選擇 Notion 資料庫</h1>
+  {% if source_error %}
+  <p class="auth-error" role="alert">讀取這個資料庫時發生問題，請確認 ID 正確，且已授權給這個 Notion 連結。</p>
+  {% endif %}
+  <p>貼上你要匯入的 Notion database 網址或 ID，我們只會讀取，不會寫回 Notion。</p>
+  <form method="post" action="{{ url_for('auth.connect_source_submit') }}" class="auth-form">
+    <label for="database_id">Database ID</label>
+    <input id="database_id" name="database_id" type="text" required placeholder="例如 1b8c5d8e33cc416ca86f75e04cb15c40">
+    <button type="submit">讀取並分類</button>
+  </form>
+  <form method="post" action="{{ url_for('auth.logout') }}">
+    <button type="submit" class="quiet-action">登出</button>
+  </form>
+</div>
+{% endblock %}
