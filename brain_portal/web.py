@@ -17,6 +17,7 @@ from brain_portal.models import (
     TenantContext,
 )
 from brain_portal.answers import QUERY_LIMIT
+from brain_portal.presentation import icon_name_for_cloud, icon_name_for_item
 from brain_portal.search import SearchResults
 
 
@@ -60,7 +61,7 @@ CLOUDS = (
         "key": "web3",
         "name": "Web3 商業研究",
         "short_name": "Web3",
-        "icon": "◌",
+        "icon_name": "orbit",
         "description": "賽道、專案與概念 Wiki。",
         "filters": ("Sector", "Project", "Thesis", "Status"),
         "paths": ("Review an active thesis", "Compare adjacent projects"),
@@ -69,7 +70,7 @@ CLOUDS = (
         "key": "food",
         "name": "美食與咖啡地圖",
         "short_name": "美食地圖",
-        "icon": "⌖",
+        "icon_name": "map-pin",
         "description": "地點、想去清單與使用情境。",
         "filters": ("Area", "Category", "Visit status", "Use case"),
         "paths": ("Find a quiet dinner", "Plan by neighborhood"),
@@ -78,7 +79,7 @@ CLOUDS = (
         "key": "ai",
         "name": "AI 自動化",
         "short_name": "AI 自動化",
-        "icon": "✦",
+        "icon_name": "workflow",
         "description": "工具、Agent 與可重用的工作流。",
         "filters": ("Tool", "Agent", "MCP", "Workflow", "Reliability"),
         "paths": ("Build reliable agents", "Connect tools with MCP"),
@@ -331,6 +332,7 @@ def _item_card(item: KnowledgeItem) -> dict[str, object]:
         "summary": item.summary,
         "cloud_key": item.cloud_key,
         "item_type": item.item_type,
+        "icon_name": icon_name_for_item(item),
         "updated_at": item.updated_at,
         "concepts": item.concepts,
         "place": item.place,
@@ -488,6 +490,8 @@ def _cloud_cards(items: list[KnowledgeItem]) -> list[dict[str, object]]:
             count=len(cloud_items),
             count_label=f"{len(cloud_items)} 筆" if cloud_items else "尚未索引",
             freshness=_freshness_label(cloud_items),
+            icon_name=icon_name_for_cloud(cloud["key"]),
+            preview_titles=[item.title for item in cloud_items[:2]],
             url=url_for("portal.cloud", key=cloud["key"]),
         )
         cards.append(card)

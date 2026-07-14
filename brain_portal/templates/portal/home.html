@@ -1,17 +1,19 @@
 {% extends "portal/base.html" %}
+{% from "portal/_icons.html" import icon %}
 {% block content %}
 <div class="workspace-page home-page">
   <section class="workspace-heading" aria-labelledby="home-title">
     <p class="eyebrow">你的 Second Brain</p>
-    <div><h1 id="home-title">從你想找的事開始。</h1><p>搜尋所有知識，或直接進入一個 Cloud。</p></div>
+    <div><h1 id="home-title">從你想找的事開始。</h1><p>搜尋所有知識，或直接進入一個 Cloud。</p><div class="intent-links"><a class="intent-link" href="{{ url_for('portal.search', q='研究一個主題') }}">研究一個主題</a><a class="intent-link" href="{{ url_for('portal.search', q='找一個地點') }}">找一個地點</a><a class="intent-link" href="{{ url_for('portal.search', q='重用一套方法') }}">重用一套方法</a><a class="intent-link" href="{{ url_for('portal.search', q='探索關聯') }}">探索關聯</a></div></div>
   </section>
   <section id="cloud-gallery" class="workspace-section" aria-labelledby="cloud-title">
     <div class="section-head"><h2 id="cloud-title">我的 Cloud</h2><span>依內容類型快速進入</span></div>
     <div class="cloud-tile-grid">
       {% for cloud in clouds %}
-      <a class="cloud-tile cloud-{{ cloud.key }}" data-cloud-key="{{ cloud.key }}" href="{{ cloud.url }}">
-        <span class="tile-title"><b aria-hidden="true">{{ cloud.icon }}</b><strong>{{ cloud.name }}</strong></span>
+      <a class="cloud-card cloud-{{ cloud.key }}" data-cloud-key="{{ cloud.key }}" href="{{ cloud.url }}">
+        <span class="tile-title">{{ icon(cloud.icon_name) }}<strong>{{ cloud.name }}</strong></span>
         <span class="tile-copy">{{ cloud.description }}</span>
+        {% if cloud.preview_titles %}<span class="tile-preview">{{ cloud.preview_titles|join(' · ') }}</span>{% endif %}
         <span class="tile-meta"><span>{{ cloud.count_label }}</span><span>{{ cloud.freshness }}</span></span>
       </a>
       {% endfor %}
@@ -22,8 +24,8 @@
     {% if recent %}
     <div class="continue-list">
       {% for item in recent %}
-      <a class="continue-row" data-source-id="{{ item.source_id }}" href="{{ item.url }}">
-        <span class="row-icon" aria-hidden="true">{% if item.cloud_key == 'food' %}⌖{% elif item.cloud_key == 'web3' %}◌{% else %}✦{% endif %}</span>
+      <a class="continue-row knowledge-card" data-source-id="{{ item.source_id }}" href="{{ item.url }}">
+        <span class="row-icon">{{ icon(item.icon_name) }}</span>
         <span class="row-content"><strong>{{ item.title }}</strong><small>{{ item.summary }}</small></span>
         <span class="cloud-badge cloud-{{ item.cloud_key }}">{{ item.cloud_key }}</span>
       </a>

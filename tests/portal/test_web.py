@@ -160,6 +160,17 @@ def test_home_is_a_compact_cloud_workbench_with_real_counts(portal_setup):
     assert "Find a useful note, then follow its sources." not in html
 
 
+def test_home_uses_semantic_svg_cloud_icons_and_real_previews(portal_setup):
+    client, *_ = portal_setup
+
+    html = client.get("/").get_data(as_text=True)
+
+    assert 'data-icon="orbit"' in html
+    assert 'data-icon="map-pin"' in html
+    assert "◌" not in html and "⌖" not in html and "✦" not in html
+    assert "研究一個主題" in html
+
+
 def test_cloud_views_use_domain_specific_data_backed_workspaces(portal_setup):
     client, *_ = portal_setup
 

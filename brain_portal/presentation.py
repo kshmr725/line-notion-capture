@@ -11,6 +11,36 @@ _CATEGORY_PREFIX = re.compile(r"^\[[^\]]+\]\s*")
 _H1 = re.compile(r"^#\s+(.+?)\s*$", re.MULTILINE)
 _ALLOWED = {"title", "location", "address", "area", "category", "status"}
 _ALIASES = {"咖啡店": "咖啡廳", "黑膠咖啡": "咖啡廳", "甜點店": "甜點"}
+_CLOUD_ICONS = {"web3": "orbit", "food": "map-pin", "ai": "workflow"}
+_TYPE_ICONS = {
+    "research": "file-text",
+    "report": "file-text",
+    "project": "layers",
+    "concept": "nodes",
+    "tool": "wrench",
+    "agent": "robot",
+    "mcp": "plug",
+    "workflow": "branch",
+    "guide": "book",
+    "news": "newspaper",
+}
+
+
+def icon_name_for_cloud(cloud_key: str) -> str:
+    return _CLOUD_ICONS.get(cloud_key, "grid")
+
+
+def icon_name_for_item(item: Any) -> str:
+    if getattr(item, "place", None) is not None:
+        category = str(item.place.get("category", ""))
+        if "咖啡" in category:
+            return "coffee"
+        if "酒" in category:
+            return "glass"
+        if "甜點" in category:
+            return "cake"
+        return "utensils"
+    return _TYPE_ICONS.get(str(getattr(item, "item_type", "")).lower(), "file-text")
 
 def clean_display_title(value: str) -> str:
     value = _DATE_PREFIX.sub("", value.strip())

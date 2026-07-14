@@ -1,4 +1,5 @@
 <!doctype html>
+{% from "portal/_icons.html" import icon %}
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8">
@@ -12,14 +13,14 @@
   <a class="skip-link" href="#main-content">跳到主要內容</a>
   <div class="workspace-shell">
     <aside id="cloud-rail" class="cloud-rail" aria-label="Second Brain 導覽">
-      <a class="workspace-brand" href="{{ url_for('portal.home') }}" aria-label="Brain Cloud 首頁"><span aria-hidden="true">☁</span><span>Brain Cloud</span></a>
+      <a class="workspace-brand" href="{{ url_for('portal.home') }}" aria-label="Brain Cloud 首頁">{{ icon('grid') }}<span>Brain Cloud</span></a>
       <nav class="cloud-rail-nav" aria-label="Cloud 導覽">
-        <a href="{{ url_for('portal.home') }}" {% if request.endpoint == 'portal.home' %}aria-current="page"{% endif %}><span aria-hidden="true">▦</span>首頁</a>
+        <a href="{{ url_for('portal.home') }}" {% if request.endpoint == 'portal.home' %}aria-current="page"{% endif %}>{{ icon('grid') }}首頁</a>
         {% for nav_cloud in nav_clouds %}
-        <a href="{{ url_for('portal.cloud', key=nav_cloud.key) }}" {% if active_cloud_key == nav_cloud.key %}aria-current="page"{% endif %}><span aria-hidden="true">{{ nav_cloud.icon }}</span>{{ nav_cloud.short_name }}</a>
+        <a href="{{ url_for('portal.cloud', key=nav_cloud.key) }}" {% if active_cloud_key == nav_cloud.key %}aria-current="page"{% endif %}>{{ icon(nav_cloud.icon_name) }}{{ nav_cloud.short_name }}</a>
         {% endfor %}
       </nav>
-      <a class="rail-utility" href="{{ url_for('portal.sync') }}"><span aria-hidden="true">↻</span>資料來源</a>
+      <a class="rail-utility" href="{{ url_for('portal.sync') }}">{{ icon('branch') }}資料來源</a>
     </aside>
     <div class="workspace-main">
       <header class="workspace-topbar">
