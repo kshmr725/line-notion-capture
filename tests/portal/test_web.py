@@ -481,6 +481,108 @@ def test_item_reader_renders_markdown_body_without_source_syntax():
     assert "# 不應該露出的 Markdown 標記" not in html
 
 
+def test_item_reader_turns_source_labels_into_scannable_sections():
+    repository = FakeRepository()
+    repository.items = [
+        item(
+            "structured",
+            cloud_key="food",
+            item_type="place",
+            place={"name": "Light up cafe", "category": "咖啡廳"},
+            summary="⭐ **評價**：4.7<br>📍 **地址**：彰化市陳稜路228號",
+            body=(
+                "# Light up cafe\n\n"
+                "⭐ **評價**：4.7<br>📍 **地址**：彰化市陳稜路228號\n\n"
+                "📌 **這是什麼**：結合光雕與餐飲的特色咖啡廳。\n"
+                "💡 **關鍵重點**：提供冷萃咖啡與創意甜點。\n"
+                "⚡ **行動建議**：建議平日前往以避開人潮。\n"
+                "🗺️ **地圖**：[Google Maps](https://maps.google.com/example)"
+            ),
+        )
+    ]
+    app = create_app(
+        dependencies=PortalDependencies(
+            repository, TenantResolver(), SearchService(), AnswerService(False)
+        )
+    )
+    app.config.update(TESTING=True)
+
+    html = app.test_client().get("/item/structured").get_data(as_text=True)
+
+    assert 'class="reader-layout"' in html
+    assert 'id="reader-overview"' in html
+    assert 'class="reader-fact-grid"' in html
+    assert "評價" in html and "4.7" in html
+    assert "地址" in html and "彰化市陳稜路228號" in html
+    assert "內容概覽" in html and "結合光雕與餐飲的特色咖啡廳。" in html
+    assert "關鍵重點" in html and "提供冷萃咖啡與創意甜點。" in html
+    assert "行動建議" in html and "建議平日前往以避開人潮。" in html
+    assert '<details id="reader-source"' in html
+    assert "查看完整原文" in html
+    assert html.index('id="reader-overview"') < html.index('id="reader-source"')
+
+
+def test_item_reader_does_not_expose_raw_markdown_links_in_key_points():
+    repository = FakeRepository()
+    repository.items = [
+        item(
+            "links",
+            summary="A useful source-backed note.",
+            body=(
+                "💡 **關鍵重點**：先看[官方文件](https://example.com/docs)。\n"
+                "⚡ **行動建議**：完成後再驗證。"
+            ),
+        )
+    ]
+    app = create_app(
+        dependencies=PortalDependencies(
+            repository, TenantResolver(), SearchService(), AnswerService(False)
+        )
+    )
+    app.config.update(TESTING=True)
+
+    html = app.test_client().get("/item/links").get_data(as_text=True)
+
+    key_points = html.split('id="reader-key-points"', 1)[1].split(
+        'id="reader-source"', 1
+    )[0]
+    assert "先看官方文件。" in key_points
+    assert "https://example.com/docs" not in key_points
+    assert "[官方文件]" not in key_points
+
+
+def test_item_reader_uses_same_structure_for_non_food_clouds():
+    repository = FakeRepository()
+    repository.items = [
+        item(
+            "web3-note",
+            cloud_key="web3",
+            body=(
+                "## Thesis\n"
+                "Restaking demand depends on sustainable protocol revenue.\n\n"
+                "## Risk\n"
+                "Incentives can hide weak organic demand."
+            ),
+        )
+    ]
+    app = create_app(
+        dependencies=PortalDependencies(
+            repository, TenantResolver(), SearchService(), AnswerService(False)
+        )
+    )
+    app.config.update(TESTING=True)
+
+    html = app.test_client().get("/item/web3-note").get_data(as_text=True)
+
+    assert 'id="reader-overview"' in html
+    assert 'id="reader-key-points"' in html
+    assert "Thesis" in html
+    assert "Restaking demand depends on sustainable protocol revenue." in html
+    assert "Risk" in html
+    assert "Incentives can hide weak organic demand." in html
+    assert 'class="reader-fact-grid"' not in html
+
+
 def test_workspace_navigation_uses_task_language_instead_of_schema_terms(portal_setup):
     client, *_ = portal_setup
 

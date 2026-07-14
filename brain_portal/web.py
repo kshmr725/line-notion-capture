@@ -36,6 +36,8 @@ from brain_portal.presentation import (
     place_facts,
     public_cloud_label,
     public_type_label,
+    reader_overview,
+    reader_sections,
     reader_summary,
     render_markdown_body,
 )
@@ -650,6 +652,8 @@ def _item_card(item: KnowledgeItem) -> dict[str, object]:
 
 def _item_detail(item: KnowledgeItem) -> dict[str, object]:
     detail = _item_card(item)
+    overview = reader_overview(item.summary, item.body)
+    sections = reader_sections(item.body, overview=overview)
     detail.update(
         body=item.body,
         rendered_body=render_markdown_body(item.body),
@@ -659,7 +663,9 @@ def _item_detail(item: KnowledgeItem) -> dict[str, object]:
         canonical_action=_canonical_action(item),
         reading_time=max(1, math.ceil(len(re.findall(r"\w+", item.body)) / 200)),
         confidence="Source-backed",
-        takeaways=_takeaways(item),
+        reader_overview=overview,
+        reader_sections=sections,
+        takeaways=[section["body"] for section in sections] or _takeaways(item),
         maps_action=_maps_action(item.place),
     )
     return detail

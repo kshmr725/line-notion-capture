@@ -70,6 +70,8 @@ def public_type_label(item_type: str) -> str:
 def clean_display_text(value: str) -> str:
     """Remove source markup from short reader-facing labels and summaries."""
     text = unescape(str(value or ""))
+    text = re.sub(r"\[([^\]]+)\]\(https?://[^\s)]+\)", r"\1", text)
+    text = re.sub(r"(?<!\()https?://\S+", "", text)
     text = re.sub(r"\[\[([^\]|]+)\|([^\]]+)\]\]", r"\2", text)
     text = re.sub(r"\[\[([^\]]+)\]\]", r"\1", text)
     text = re.sub(r"(?m)^\s*#{1,6}\s+", "", text)
@@ -77,6 +79,99 @@ def clean_display_text(value: str) -> str:
     text = re.sub(r"<[^>]+>", " ", text)
     text = re.sub(r"[*_~`]+", "", text)
     return re.sub(r"\s+", " ", text).strip()
+
+
+_READER_LABELS = {
+    "這是什麼": "內容概覽",
+    "關鍵重點": "關鍵重點",
+    "行動建議": "行動建議",
+    "適合情境": "適合情境",
+    "痛點解決": "解決什麼問題",
+    "推薦品項": "推薦品項",
+    "其他備註": "實用提醒",
+    "風險": "風險與限制",
+    "限制": "風險與限制",
+}
+_READER_LABEL = re.compile(
+    r"^[^\w\u4e00-\u9fff]*\*{0,2}([^：:*]+?)\*{0,2}\s*[:：]\s*(.+)$"
+)
+
+
+def reader_overview(summary: str, body: str) -> str:
+    """Choose a concise source-grounded introduction without metadata noise."""
+    for raw_line in str(body or "").replace("<br>", "\n").splitlines():
+        match = _READER_LABEL.match(raw_line.strip())
+        if match and match.group(1).strip() == "這是什麼":
+            return reader_summary(match.group(2), limit=240)
+    return reader_summary(summary, limit=240)
+
+
+def reader_sections(
+    body: str,
+    *,
+    overview: str = "",
+    limit: int = 6,
+) -> list[dict[str, str]]:
+    """Turn common note conventions into a consistent, scannable reading layer.
+
+    The source remains unchanged. This deterministic projection recognizes the
+    labeled lines and Markdown headings already used across the vault, while
+    deliberately excluding duplicate place metadata and map URLs.
+    """
+    sections: list[dict[str, str]] = []
+    current_heading = ""
+    current_parts: list[str] = []
+
+    def add(title: str, value: str) -> None:
+        cleaned = reader_summary(value, limit=260)
+        if not cleaned or cleaned == overview:
+            return
+        key = (title.casefold(), cleaned.casefold())
+        if any(
+            (entry["title"].casefold(), entry["body"].casefold()) == key
+            for entry in sections
+        ):
+            return
+        sections.append({"title": title, "body": cleaned})
+
+    def flush_heading() -> None:
+        nonlocal current_heading, current_parts
+        if current_heading and current_parts:
+            add(current_heading, "；".join(current_parts))
+        current_heading = ""
+        current_parts = []
+
+    normalized = str(body or "").replace("\r\n", "\n").replace("<br>", "\n")
+    for raw_line in normalized.splitlines():
+        line = raw_line.strip()
+        if not line:
+            flush_heading()
+            continue
+        heading = re.match(r"^(#{1,6})\s+(?:\d+[.)]\s*)?(.+)$", line)
+        if heading:
+            flush_heading()
+            if len(heading.group(1)) > 1:
+                current_heading = clean_display_text(heading.group(2))
+            continue
+        label_match = _READER_LABEL.match(line)
+        if label_match:
+            label = clean_display_text(label_match.group(1)).strip()
+            value = label_match.group(2)
+            if label in {"評價", "地址", "時間", "營業時間", "價位/特色", "價位／特色", "地圖"}:
+                continue
+            mapped = _READER_LABELS.get(label)
+            if mapped:
+                flush_heading()
+                if mapped != "內容概覽":
+                    add(mapped, value)
+                continue
+        if current_heading:
+            cleaned_line = re.sub(r"^(?:[-*]|\d+\.)\s+", "", line)
+            cleaned_line = clean_display_text(cleaned_line)
+            if cleaned_line:
+                current_parts.append(cleaned_line)
+    flush_heading()
+    return sections[:limit]
 
 
 def reader_summary(
