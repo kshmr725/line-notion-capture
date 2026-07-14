@@ -25,3 +25,8 @@ class PortalSettings:
     session_ttl_days: int = int(os.getenv("PORTAL_SESSION_TTL_DAYS", "14"))
     magic_link_ttl_minutes: int = int(os.getenv("PORTAL_MAGIC_LINK_TTL_MINUTES", "15"))
     dev_auth: bool = os.getenv("PORTAL_DEV_AUTH", "false").strip().lower() == "true"
+    notion_oauth_client_id: str = os.getenv("NOTION_OAUTH_CLIENT_ID", "")
+    notion_oauth_client_secret: str = os.getenv("NOTION_OAUTH_CLIENT_SECRET", "")
+    notion_oauth_redirect_url: str = os.getenv("NOTION_OAUTH_REDIRECT_URL", "")
+    oauth_state_ttl_minutes: int = int(os.getenv("PORTAL_OAUTH_STATE_TTL_MINUTES", "10"))
+    token_encryption_key: str = os.getenv("PORTAL_TOKEN_ENCRYPTION_KEY", "")

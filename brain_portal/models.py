@@ -60,6 +60,16 @@ class OnboardingState:
 
 
 @dataclass(frozen=True)
+class CloudProposal:
+    key: str
+    label: str
+    confidence: float
+    sample_titles: tuple[str, ...]
+    detected_fields: tuple[str, ...]
+    source_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class SyncRun:
     source_type: str
     status: str

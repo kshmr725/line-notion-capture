@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import threading
 from datetime import datetime, timedelta, timezone
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 from flask import Flask
@@ -9,6 +11,8 @@ from flask import Flask
 from brain_portal.auth import (
     NullMailTransport,
     _consume_magic_link_token,
+    begin_notion_oauth,
+    complete_notion_oauth,
     create_auth_blueprint,
     create_authenticated_tenant_resolver,
     resolve_principal,
@@ -44,6 +48,11 @@ def settings():
         session_ttl_days=14,
         magic_link_ttl_minutes=15,
         dev_auth=True,
+        notion_oauth_client_id="client-id",
+        notion_oauth_client_secret="client-secret",
+        notion_oauth_redirect_url="https://portal.example.com/oauth/notion/callback",
+        oauth_state_ttl_minutes=10,
+        token_encryption_key="test-token-encryption-key",
     )
 
 
@@ -90,6 +99,30 @@ def _invite(repository, email: str) -> None:
 
 def _request_magic_link(client, email: str):
     return client.post("/login/request", data={"email": email})
+
+
+def _create_user(repository, user_id: str, email: str) -> None:
+    connection = portal_connect(repository.path)
+    with connection:
+        connection.execute(
+            "INSERT INTO users (user_id, email) VALUES (?, ?)", (user_id, email)
+        )
+    connection.close()
+
+
+def _sign_in(client, repository, transport, email: str) -> str:
+    """Invites, signs in `email`, and returns its user_id."""
+    _invite(repository, email)
+    _request_magic_link(client, email)
+    _, verify_url = transport.sent[-1]
+    token = verify_url.split("token=", 1)[1]
+    client.get(f"/auth/verify?token={token}")
+    connection = portal_connect(repository.path)
+    user_id = connection.execute(
+        "SELECT user_id FROM users WHERE email = ?", (email.lower(),)
+    ).fetchone()["user_id"]
+    connection.close()
+    return user_id
 
 
 def test_login_page_renders_for_anonymous_user(auth_app):
@@ -379,3 +412,224 @@ def test_two_invited_users_never_share_a_tenant(auth_app, repository, transport)
     }
     connection.close()
     assert len(tenant_ids) == 2
+
+
+def _fake_token_response(**overrides):
+    payload = {
+        "access_token": "secret-notion-access-token",
+        "workspace_id": "workspace-1",
+        "workspace_name": "Kevin's Workspace",
+        "bot_id": "bot-1",
+    }
+    payload.update(overrides)
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict:
+            return payload
+
+    return FakeResponse()
+
+
+def test_begin_notion_oauth_creates_a_state_bound_authorization_url(
+    settings, repository, clock
+):
+    _create_user(repository, "user-1", "user-1@example.com")
+    url = begin_notion_oauth(settings, repository, "user-1", clock)
+
+    parsed = urlparse(url)
+    params = parse_qs(parsed.query)
+    assert parsed.hostname == "api.notion.com"
+    assert params["client_id"] == ["client-id"]
+    assert params["redirect_uri"] == ["https://portal.example.com/oauth/notion/callback"]
+    state = params["state"][0]
+
+    connection = portal_connect(repository.path)
+    row = connection.execute(
+        "SELECT user_id, provider, used_at FROM oauth_states WHERE state = ?", (state,)
+    ).fetchone()
+    connection.close()
+    assert row["user_id"] == "user-1"
+    assert row["provider"] == "notion"
+    assert row["used_at"] is None
+
+
+def test_begin_notion_oauth_requires_configuration(repository, clock):
+    unconfigured = PortalSettings(session_secret="test-secret")
+
+    with pytest.raises(RuntimeError):
+        begin_notion_oauth(unconfigured, repository, "user-1", clock)
+
+
+def test_complete_notion_oauth_rejects_an_unknown_state(settings, repository, clock):
+    result = complete_notion_oauth(
+        settings, repository, "user-1", "not-a-real-state", "code", clock
+    )
+    assert result is None
+
+
+def test_complete_notion_oauth_rejects_a_state_bound_to_a_different_user(
+    settings, repository, clock
+):
+    _create_user(repository, "user-1", "user-1@example.com")
+    url = begin_notion_oauth(settings, repository, "user-1", clock)
+    state = parse_qs(urlparse(url).query)["state"][0]
+
+    result = complete_notion_oauth(settings, repository, "attacker", state, "code", clock)
+
+    assert result is None
+    connection = portal_connect(repository.path)
+    used_at = connection.execute(
+        "SELECT used_at FROM oauth_states WHERE state = ?", (state,)
+    ).fetchone()["used_at"]
+    connection.close()
+    assert used_at is None
+
+
+def test_complete_notion_oauth_rejects_an_expired_state(settings, repository, clock):
+    _create_user(repository, "user-1", "user-1@example.com")
+    url = begin_notion_oauth(settings, repository, "user-1", clock)
+    state = parse_qs(urlparse(url).query)["state"][0]
+    clock.advance(minutes=settings.oauth_state_ttl_minutes + 1)
+
+    result = complete_notion_oauth(settings, repository, "user-1", state, "code", clock)
+
+    assert result is None
+
+
+def test_complete_notion_oauth_rejects_a_reused_state(settings, repository, clock, monkeypatch):
+    monkeypatch.setattr(
+        "brain_portal.auth.requests.post", lambda *a, **k: _fake_token_response()
+    )
+    _create_user(repository, "user-1", "user-1@example.com")
+    url = begin_notion_oauth(settings, repository, "user-1", clock)
+    state = parse_qs(urlparse(url).query)["state"][0]
+
+    first = complete_notion_oauth(settings, repository, "user-1", state, "code", clock)
+    second = complete_notion_oauth(settings, repository, "user-1", state, "code", clock)
+
+    assert first is not None
+    assert second is None
+
+
+def test_complete_notion_oauth_exchanges_code_and_stores_an_encrypted_connection(
+    settings, repository, clock, monkeypatch
+):
+    captured = {}
+
+    def fake_post(url, **kwargs):
+        captured["url"] = url
+        captured["kwargs"] = kwargs
+        return _fake_token_response()
+
+    monkeypatch.setattr("brain_portal.auth.requests.post", fake_post)
+    _create_user(repository, "user-1", "user-1@example.com")
+    oauth_url = begin_notion_oauth(settings, repository, "user-1", clock)
+    state = parse_qs(urlparse(oauth_url).query)["state"][0]
+
+    tenant = complete_notion_oauth(
+        settings, repository, "user-1", state, "auth-code", clock
+    )
+
+    assert tenant is not None
+    assert tenant.tenant_id == "user-1"
+    assert captured["url"] == "https://api.notion.com/v1/oauth/token"
+    assert captured["kwargs"]["auth"] == ("client-id", "client-secret")
+    assert captured["kwargs"]["json"]["code"] == "auth-code"
+
+    connection = portal_connect(repository.path)
+    row = connection.execute(
+        """
+        SELECT config_json FROM source_connections
+        WHERE tenant_id = ? AND source_type = 'notion'
+        """,
+        ("user-1",),
+    ).fetchone()
+    connection.close()
+    config = json.loads(row["config_json"])
+    assert config["workspace_name"] == "Kevin's Workspace"
+    assert "token_ciphertext" in config
+    assert "token_nonce" in config
+    assert config["token_key_version"] == 1
+
+
+def test_complete_notion_oauth_never_stores_the_raw_access_token(
+    settings, repository, clock, monkeypatch
+):
+    monkeypatch.setattr(
+        "brain_portal.auth.requests.post", lambda *a, **k: _fake_token_response()
+    )
+    _create_user(repository, "user-1", "user-1@example.com")
+    url = begin_notion_oauth(settings, repository, "user-1", clock)
+    state = parse_qs(urlparse(url).query)["state"][0]
+
+    complete_notion_oauth(settings, repository, "user-1", state, "auth-code", clock)
+
+    connection = portal_connect(repository.path)
+    row = connection.execute(
+        "SELECT config_json FROM source_connections WHERE tenant_id = ?", ("user-1",)
+    ).fetchone()
+    connection.close()
+    assert "secret-notion-access-token" not in row["config_json"]
+
+
+def test_oauth_start_route_redirects_anonymous_user_to_login(auth_app):
+    response = auth_app.test_client().get(
+        "/oauth/notion/start", follow_redirects=False
+    )
+    assert response.status_code in (302, 303)
+    assert "/login" in response.headers["Location"]
+
+
+def test_oauth_start_route_redirects_to_notion_when_authenticated(
+    auth_app, repository, transport
+):
+    client = auth_app.test_client()
+    _sign_in(client, repository, transport, "friend@example.com")
+
+    response = client.get("/oauth/notion/start", follow_redirects=False)
+
+    assert response.status_code in (302, 303)
+    assert response.headers["Location"].startswith(
+        "https://api.notion.com/v1/oauth/authorize"
+    )
+
+
+def test_oauth_callback_route_redirects_to_onboarding_on_missing_code(
+    auth_app, repository, transport
+):
+    client = auth_app.test_client()
+    _sign_in(client, repository, transport, "friend@example.com")
+
+    response = client.get("/oauth/notion/callback?error=access_denied", follow_redirects=False)
+
+    assert response.status_code in (302, 303)
+    assert response.headers["Location"].endswith("/onboarding?oauth_error=1")
+
+
+def test_oauth_callback_route_completes_the_flow(
+    auth_app, repository, transport, monkeypatch
+):
+    monkeypatch.setattr(
+        "brain_portal.auth.requests.post", lambda *a, **k: _fake_token_response()
+    )
+    client = auth_app.test_client()
+    user_id = _sign_in(client, repository, transport, "friend@example.com")
+
+    start_response = client.get("/oauth/notion/start", follow_redirects=False)
+    state = parse_qs(urlparse(start_response.headers["Location"]).query)["state"][0]
+
+    response = client.get(
+        f"/oauth/notion/callback?state={state}&code=auth-code", follow_redirects=False
+    )
+
+    assert response.status_code in (302, 303)
+    assert response.headers["Location"].endswith("/onboarding")
+    connection = portal_connect(repository.path)
+    row = connection.execute(
+        "SELECT status FROM source_connections WHERE tenant_id = ?", (user_id,)
+    ).fetchone()
+    connection.close()
+    assert row["status"] == "active"

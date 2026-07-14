@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import base64
 import hashlib
+import json
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Optional
+from urllib.parse import urlencode
 
+import requests
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from flask import Blueprint, Response, redirect, render_template, request, url_for
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 
@@ -15,6 +20,9 @@ from brain_portal.models import AuthenticatedPrincipal, OnboardingState, TenantC
 
 SESSION_COOKIE_NAME = "brain_cloud_session"
 _SESSION_SALT = "brain-cloud-session"
+NOTION_OAUTH_AUTHORIZE_URL = "https://api.notion.com/v1/oauth/authorize"
+NOTION_OAUTH_TOKEN_URL = "https://api.notion.com/v1/oauth/token"
+TOKEN_KEY_VERSION = 1
 
 Clock = Callable[[], datetime]
 TenantResolver = Callable[[], Optional[TenantContext]]
@@ -122,7 +130,35 @@ def create_auth_blueprint(
             state_label=_ONBOARDING_LABELS.get(
                 state.status if state else "needs_source", "準備中"
             ),
+            oauth_configured=_oauth_configured(settings),
+            oauth_error=request.args.get("oauth_error") == "1",
         )
+
+    @auth.get("/oauth/notion/start")
+    def oauth_notion_start():
+        principal = resolve_principal(settings, repository, clock)
+        if principal is None:
+            return redirect(url_for("auth.login_page"))
+        if not _oauth_configured(settings):
+            return redirect(url_for("auth.onboarding", oauth_error="1"))
+        return redirect(begin_notion_oauth(settings, repository, principal.user_id, clock))
+
+    @auth.get("/oauth/notion/callback")
+    def oauth_notion_callback():
+        principal = resolve_principal(settings, repository, clock)
+        if principal is None:
+            return redirect(url_for("auth.login_page"))
+        state = request.args.get("state", "")
+        code = request.args.get("code", "")
+        error = request.args.get("error")
+        if error or not state or not code:
+            return redirect(url_for("auth.onboarding", oauth_error="1"))
+        tenant = complete_notion_oauth(
+            settings, repository, principal.user_id, state, code, clock
+        )
+        if tenant is None:
+            return redirect(url_for("auth.onboarding", oauth_error="1"))
+        return redirect(url_for("auth.onboarding"))
 
     return auth
 
@@ -138,6 +174,174 @@ _ONBOARDING_LABELS = {
 
 def _auth_configured(settings: PortalSettings) -> bool:
     return bool(settings.session_secret.strip())
+
+
+def _oauth_configured(settings: PortalSettings) -> bool:
+    return bool(
+        settings.notion_oauth_client_id.strip()
+        and settings.notion_oauth_client_secret.strip()
+        and settings.notion_oauth_redirect_url.strip()
+        and settings.token_encryption_key.strip()
+    )
+
+
+def begin_notion_oauth(
+    settings: PortalSettings, repository, principal_id: str, clock: Clock | None = None
+) -> str:
+    clock = clock or _default_clock
+    if not _oauth_configured(settings):
+        raise RuntimeError("Notion OAuth is not configured")
+    state = secrets.token_urlsafe(32)
+    connection = portal_connect(repository.path)
+    try:
+        with connection:
+            connection.execute(
+                """
+                INSERT INTO oauth_states (state, user_id, provider, created_at, expires_at)
+                VALUES (?, ?, 'notion', ?, ?)
+                """,
+                (
+                    state,
+                    principal_id,
+                    _now_iso(clock),
+                    (
+                        clock() + timedelta(minutes=settings.oauth_state_ttl_minutes)
+                    ).isoformat(),
+                ),
+            )
+    finally:
+        connection.close()
+    params = {
+        "client_id": settings.notion_oauth_client_id,
+        "response_type": "code",
+        "owner": "user",
+        "redirect_uri": settings.notion_oauth_redirect_url,
+        "state": state,
+    }
+    return f"{NOTION_OAUTH_AUTHORIZE_URL}?{urlencode(params)}"
+
+
+def complete_notion_oauth(
+    settings: PortalSettings,
+    repository,
+    principal_id: str,
+    state: str,
+    code: str,
+    clock: Clock | None = None,
+) -> TenantContext | None:
+    clock = clock or _default_clock
+    if not _oauth_configured(settings) or not state or not code:
+        return None
+    if not _claim_oauth_state(settings, repository, principal_id, state, clock):
+        return None
+
+    try:
+        response = requests.post(
+            NOTION_OAUTH_TOKEN_URL,
+            auth=(settings.notion_oauth_client_id, settings.notion_oauth_client_secret),
+            json={
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": settings.notion_oauth_redirect_url,
+            },
+            headers={"Content-Type": "application/json"},
+            timeout=20,
+        )
+        response.raise_for_status()
+        payload = response.json()
+    except Exception:
+        return None
+
+    access_token = payload.get("access_token")
+    if not isinstance(access_token, str) or not access_token:
+        return None
+    workspace_id = str(payload.get("workspace_id") or "")
+    workspace_name = str(payload.get("workspace_name") or "")
+    bot_id = str(payload.get("bot_id") or "")
+
+    ciphertext, nonce = _encrypt_token(settings, access_token)
+    tenant_id = principal_id
+    connection = portal_connect(repository.path)
+    try:
+        with connection:
+            _ensure_tenant_for_user(connection, principal_id)
+            connection.execute(
+                """
+                INSERT INTO source_connections (
+                    tenant_id, source_type, connection_id, config_json, status
+                )
+                VALUES (?, 'notion', ?, ?, 'active')
+                ON CONFLICT (tenant_id, source_type, connection_id) DO UPDATE SET
+                    config_json = excluded.config_json,
+                    status = 'active'
+                """,
+                (
+                    tenant_id,
+                    workspace_id or "default",
+                    json.dumps(
+                        {
+                            "workspace_id": workspace_id,
+                            "workspace_name": workspace_name,
+                            "bot_id": bot_id,
+                            "token_ciphertext": ciphertext,
+                            "token_nonce": nonce,
+                            "token_key_version": TOKEN_KEY_VERSION,
+                        }
+                    ),
+                ),
+            )
+    finally:
+        connection.close()
+    return TenantContext(tenant_id=tenant_id, display_name="我的 Brain Cloud")
+
+
+def _claim_oauth_state(
+    settings: PortalSettings, repository, principal_id: str, state: str, clock: Clock
+) -> bool:
+    now_iso = _now_iso(clock)
+    connection = portal_connect(repository.path)
+    try:
+        with connection:
+            # Atomic claim, same shape as _consume_magic_link_token: the
+            # WHERE clause folds "unused", "not expired", and "belongs to
+            # this authenticated session" into the single UPDATE so two
+            # concurrent callbacks (or a state stolen/replayed against a
+            # different session) cannot both succeed.
+            cursor = connection.execute(
+                """
+                UPDATE oauth_states
+                SET used_at = ?
+                WHERE state = ? AND user_id = ? AND provider = 'notion'
+                  AND used_at IS NULL AND expires_at >= ?
+                """,
+                (now_iso, state, principal_id, now_iso),
+            )
+            return cursor.rowcount == 1
+    finally:
+        connection.close()
+
+
+def _derive_encryption_key(settings: PortalSettings) -> bytes:
+    return hashlib.sha256(settings.token_encryption_key.encode("utf-8")).digest()
+
+
+def _encrypt_token(settings: PortalSettings, plaintext: str) -> tuple[str, str]:
+    key = _derive_encryption_key(settings)
+    nonce = secrets.token_bytes(12)
+    ciphertext = AESGCM(key).encrypt(nonce, plaintext.encode("utf-8"), None)
+    return (
+        base64.b64encode(ciphertext).decode("ascii"),
+        base64.b64encode(nonce).decode("ascii"),
+    )
+
+
+def decrypt_source_token(settings: PortalSettings, config: dict) -> str:
+    if config.get("token_key_version") != TOKEN_KEY_VERSION:
+        raise ValueError("unsupported token key version")
+    key = _derive_encryption_key(settings)
+    nonce = base64.b64decode(config["token_nonce"])
+    ciphertext = base64.b64decode(config["token_ciphertext"])
+    return AESGCM(key).decrypt(nonce, ciphertext, None).decode("utf-8")
 
 
 def _issue_magic_link_if_invited(

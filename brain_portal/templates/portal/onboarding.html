@@ -3,9 +3,16 @@
 <div class="auth-panel">
   <p class="eyebrow">{{ principal.email }}</p>
   <h1>{{ state_label }}</h1>
+  {% if oauth_error %}
+  <p class="auth-error" role="alert">連接 Notion 時發生問題，請再試一次。</p>
+  {% endif %}
   {% if not state or state.status == 'needs_source' %}
   <p>你的帳號已建立。接下來連接一個來源，我們就會開始幫你整理成 Brain Cloud。</p>
+  {% if oauth_configured %}
+  <a class="primary-action" href="{{ url_for('auth.oauth_notion_start') }}">連接 Notion</a>
+  {% else %}
   <p class="auth-status" role="status">連接 Notion（即將推出）</p>
+  {% endif %}
   {% elif state.status in ('proposed', 'confirmed', 'indexing') %}
   <p>我們正在讀取你的來源並建立分類，這通常需要一到十分鐘。</p>
   {% elif state.status == 'ready' %}
