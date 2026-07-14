@@ -542,6 +542,24 @@ def test_missing_tenant_is_rejected_before_repository_access():
     assert repository.tenant_calls == []
 
 
+def test_static_assets_are_reachable_without_a_tenant():
+    repository = FakeRepository()
+    app = create_app(
+        dependencies=PortalDependencies(
+            repository,
+            lambda: None,
+            SearchService(),
+            AnswerService(),
+        )
+    )
+    app.config.update(TESTING=True)
+
+    response = app.test_client().get("/portal-static/portal.css")
+
+    assert response.status_code == 200
+    assert repository.tenant_calls == []
+
+
 def test_cross_tenant_item_is_404_even_if_repository_returns_it(portal_setup):
     client, *_ = portal_setup
 

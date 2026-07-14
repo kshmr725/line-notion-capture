@@ -110,6 +110,8 @@ def create_portal_blueprint(dependencies: PortalDependencies) -> Blueprint:
 
     @portal.before_request
     def resolve_request_tenant():
+        if request.endpoint == "portal.static":
+            return
         tenant = dependencies.tenant_resolver()
         if tenant is None or not tenant.tenant_id.strip():
             abort(401)
