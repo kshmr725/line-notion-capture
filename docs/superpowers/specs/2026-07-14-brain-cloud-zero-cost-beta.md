@@ -33,26 +33,16 @@ operational upgrade, not an architectural rewrite.
 
 ## 2. Signed visual source
 
-The visual source of truth is the user-provided 2026-07-14 screenshot of the earlier Cloud Shell,
-not the green restoration currently in `brain_portal/static/portal.css`.
+The user-provided 2026-07-14 screenshot remains the information-architecture reference: search,
+Cloud cards, a left rail, domain-specific Web3/Food views, and visible cross-Cloud links. The
+approved product visual system is the recovered warm-paper and amber direction in
+[`2026-07-14-brain-cloud-warm-portal-visual-system.md`](2026-07-14-brain-cloud-warm-portal-visual-system.md).
 
-The approved shell has these non-negotiable traits:
-
-- a white canvas and near-black typography;
-- one vivid blue interaction color;
-- black active navigation and primary actions;
-- a visible blue selection/focus keyline;
-- thin neutral-gray dividers;
-- editorial spacing instead of tinted dashboard panels;
-- clear line icons;
-- a desktop left navigation rail;
-- a compact horizontal navigation row at narrow widths;
-- Cloud cards and navigation that open domain-specific workspaces;
-- cross-Cloud Wiki relationships visible near the content, not hidden in metadata.
-
-The July 10 Cloud Shell HTML remains a structural reference only. Its semantic host variables did
-not define a palette. The later green palette was invented during restoration and is explicitly
-rejected.
+The implementation uses a warm canvas and paper reading surfaces, charcoal typography and active
+navigation, amber for primary actions and selection, and blue only for system links, focus, sync,
+and cross-Cloud relationships. The accidental green/teal restoration is explicitly rejected. The
+July 10 Cloud Shell HTML remains a structural reference only; its semantic host variables did not
+define a palette.
 
 ### 2.1 Visual tokens
 
@@ -501,11 +491,12 @@ No page may report `Up to date` without repository evidence.
 
 ### 13.1 Product acceptance
 
-- the Portal matches the signed screenshot's black/white/blue hierarchy;
+- the Portal matches the signed screenshot's information hierarchy and the approved warm-paper,
+  charcoal, amber, and blue-system visual system;
 - no green or teal neutral token remains;
 - Cloud navigation works from the rail and home cards;
 - Web3, Food, and AI expose distinct useful workspaces;
-- Kevin's vault reports 26 places, 25 mapped, and one awaiting location;
+- Kevin's vault reports 26 places, 23 mapped, and three awaiting location;
 - a mapped place can be selected from map and list in both directions;
 - display titles contain no import-date or leading-category noise;
 - semantic icons match item type and category;
