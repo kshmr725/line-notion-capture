@@ -161,6 +161,16 @@ def test_home_is_a_compact_cloud_workbench_with_real_counts(portal_setup):
     assert "Find a useful note, then follow its sources." not in html
 
 
+def test_cloud_gallery_header_opens_an_input_ready_search(portal_setup):
+    client, *_ = portal_setup
+
+    html = client.get("/").get_data(as_text=True)
+
+    assert 'class="section-action"' in html
+    assert 'href="/search"' in html
+    assert "搜尋所有內容" in html
+
+
 def test_home_uses_semantic_svg_cloud_icons_and_real_previews(portal_setup):
     client, *_ = portal_setup
 

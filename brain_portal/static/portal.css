@@ -71,6 +71,8 @@ button:active, .primary-action:active { transform: translateY(1px) scale(.99); }
 .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .section-head h2, .workspace-section h2, .food-panel h2, .ai-guide h2 { margin: 0; font-family: var(--display); font-size: 1.18rem; letter-spacing: -.03em; }
 .section-head span { color: var(--portal-muted); font-size: .78rem; }
+.section-action { display: inline-flex; align-items: center; gap: 5px; min-height: 32px; color: var(--portal-blue); font-size: .78rem; font-weight: 750; }
+.section-action:hover { color: var(--portal-ink); text-decoration: underline; text-underline-offset: 3px; }
 
 .intent-links { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 28px; }
 .intent-link { display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; min-height: 92px; padding: 12px 14px; border: 1px solid var(--portal-line); border-radius: 13px; background: var(--portal-paper); color: var(--portal-ink); font-size: .86rem; transition: border-color .18s ease, background-color .18s ease, transform .18s ease, box-shadow .18s ease; }

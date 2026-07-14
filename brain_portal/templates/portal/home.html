@@ -12,7 +12,7 @@
     </nav>
   </section>
   <section id="cloud-gallery" class="workspace-section" aria-labelledby="cloud-title">
-    <div class="section-head"><h2 id="cloud-title">我的 Cloud</h2><span>依內容類型快速進入</span></div>
+    <div class="section-head"><h2 id="cloud-title">我的 Cloud</h2><a class="section-action" href="{{ url_for('portal.search') }}">搜尋所有內容 <span aria-hidden="true">↗</span></a></div>
     <div class="cloud-tile-grid">
       {% for cloud in clouds %}
       <a class="cloud-card" data-cloud-key="{{ cloud.key }}" href="{{ cloud.url }}">
