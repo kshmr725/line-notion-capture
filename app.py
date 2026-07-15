@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+import os
 
 import time
 from urllib.parse import quote, urljoin
@@ -19,7 +20,9 @@ from shared_portal import create_shared_portal
 
 app = Flask(__name__)
 app.config["DRY_RUN_VISIBLE"] = settings.dry_run
-shared_portal = create_shared_portal(settings)
+shared_portal = create_shared_portal(
+    settings, access_code=os.getenv("BRAIN_ACCESS_CODE", "")
+)
 app.wsgi_app = DispatcherMiddleware(app.wsgi_app, {"/brain": shared_portal})
 
 

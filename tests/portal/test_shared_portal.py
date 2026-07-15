@@ -57,3 +57,31 @@ def test_shared_portal_fails_readably_when_existing_notion_is_missing(tmp_path):
 
     assert response.status_code == 503
     assert "Notion 尚未連接" in response.get_data(as_text=True)
+
+
+def test_shared_portal_requires_the_beta_access_code(tmp_path):
+    settings = SimpleNamespace(
+        notion_token="existing-token",
+        notion_database_id="existing-database",
+        gemini_api_key="",
+        deepseek_api_key="",
+    )
+    portal = create_shared_portal(
+        settings,
+        database_path=str(tmp_path / "shared.sqlite3"),
+        connector_factory=lambda **kwargs: FakeConnector(),
+        access_code="beta-code",
+    )
+    client = portal.test_client()
+
+    anonymous = client.get("/")
+    rejected = client.post("/access", data={"access_code": "wrong"})
+    accepted = client.post("/access", data={"access_code": "beta-code"})
+    home = client.get("/")
+
+    assert anonymous.status_code == 302
+    assert anonymous.headers["Location"].endswith("/access")
+    assert "登入碼不正確" in rejected.get_data(as_text=True)
+    assert accepted.status_code == 302
+    assert home.status_code == 200
+    assert "使用者資料庫" in home.get_data(as_text=True)
