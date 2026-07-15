@@ -85,6 +85,15 @@ CREATE TABLE IF NOT EXISTS cloud_proposals (
     FOREIGN KEY (tenant_id) REFERENCES tenants (tenant_id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS tenant_clouds (
+    tenant_id TEXT NOT NULL,
+    cloud_key TEXT NOT NULL,
+    label TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (tenant_id, cloud_key),
+    FOREIGN KEY (tenant_id) REFERENCES tenants (tenant_id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS source_connections (
     tenant_id TEXT NOT NULL,
     source_type TEXT NOT NULL,

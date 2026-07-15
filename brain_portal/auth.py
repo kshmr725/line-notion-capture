@@ -19,7 +19,7 @@ from brain_portal.config import PortalSettings
 from brain_portal.connectors.notion import NotionConnector
 from brain_portal.db import portal_connect
 from brain_portal.embeddings import GeminiEmbeddingProvider
-from brain_portal.models import AuthenticatedPrincipal, OnboardingState, TenantContext
+from brain_portal.models import AuthenticatedPrincipal, CloudEdit, OnboardingState, TenantContext
 from brain_portal.onboarding import (
     confirm_clouds,
     load_proposal,
@@ -252,10 +252,12 @@ def create_auth_blueprint(
         if _onboarding_status(repository, principal.user_id) == "ready":
             return redirect(url_for("auth.onboarding"))
         proposal_id = request.form.get("proposal_id", "").strip()
+        proposal = load_proposal(repository, principal.user_id, proposal_id)
         connection_config = _notion_connection_config(repository, principal.user_id)
         database_id = (connection_config or {}).get("database_id")
-        if not proposal_id or connection_config is None or not database_id:
+        if not proposal_id or proposal is None or connection_config is None or not database_id:
             return redirect(url_for("auth.onboarding"))
+        edits = _proposal_edits_from_form(proposal, request.form)
         try:
             token = decrypt_source_token(settings, connection_config)
             connector = NotionConnector(
@@ -276,7 +278,15 @@ def create_auth_blueprint(
             else None
         )
         try:
-            confirm_clouds(repository, principal.user_id, proposal_id, {}, documents, embedder)
+            confirm_clouds(
+                repository,
+                principal.user_id,
+                proposal_id,
+                {},
+                documents,
+                embedder,
+                edits=edits or None,
+            )
         except ValueError:
             pass
         return redirect(url_for("auth.onboarding"))
@@ -395,6 +405,23 @@ def _latest_proposal(repository, tenant_id: str):
         return None, None
     proposal_id = row["proposal_id"]
     return proposal_id, load_proposal(repository, tenant_id, proposal_id)
+
+
+def _proposal_edits_from_form(proposal, form) -> dict[str, CloudEdit]:
+    """Read edits only for source ids owned by the trusted proposal."""
+    edits: dict[str, CloudEdit] = {}
+    for group in proposal:
+        for source_id in group.source_ids:
+            target_key = form.get(f"target_key:{source_id}", "").strip()
+            label = form.get(f"label:{source_id}", "").strip()
+            excluded = form.get(f"exclude:{source_id}") == "1"
+            if target_key or label or excluded:
+                edits[source_id] = CloudEdit(
+                    target_key=target_key,
+                    label=label,
+                    excluded=excluded,
+                )
+    return edits
 
 
 def begin_notion_oauth(

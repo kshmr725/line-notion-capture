@@ -233,6 +233,40 @@ def test_confirm_clouds_defaults_unmapped_groups_to_ai_when_not_overridden(repos
     assert item.cloud_key == "ai"
 
 
+def test_confirm_clouds_applies_source_edits_and_persists_custom_cloud_label(repository):
+    documents = (
+        _doc("a", "Restaking Thesis", cloud_key="web3"),
+        _doc("b", "Quiet Noodle Shop", cloud_key="food"),
+    )
+    proposal_id = store_proposal(repository, "tenant-1", propose_clouds(documents))
+
+    state = confirm_clouds(
+        repository,
+        "tenant-1",
+        proposal_id,
+        {},
+        documents,
+        FakeEmbedder(),
+        edits={
+            "a": CloudEdit(target_key="research", label="研究資料"),
+            "b": CloudEdit(excluded=True),
+            "foreign": CloudEdit(target_key="food", label="Wrong tenant"),
+        },
+    )
+
+    assert state.status == "ready"
+    items = {item.source_id: item for item in repository.list_items("tenant-1")}
+    assert items["a"].cloud_key == "research"
+    assert "b" not in items
+    connection = portal_connect(repository.path)
+    label = connection.execute(
+        "SELECT label FROM tenant_clouds WHERE tenant_id = ? AND cloud_key = ?",
+        ("tenant-1", "research"),
+    ).fetchone()["label"]
+    connection.close()
+    assert label == "研究資料"
+
+
 def test_confirm_clouds_rejects_an_unknown_proposal(repository):
     with pytest.raises(ValueError):
         confirm_clouds(

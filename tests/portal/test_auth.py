@@ -805,6 +805,45 @@ def test_confirm_onboarding_indexes_the_proposed_items(
     assert status == "ready"
 
 
+def test_confirm_onboarding_applies_only_the_current_proposals_source_edits(
+    auth_app, repository, transport, monkeypatch
+):
+    client = auth_app.test_client()
+    user_id = _sign_in(client, repository, transport, "friend@example.com")
+    _connect_notion(client, repository, transport, monkeypatch, user_id)
+    _mock_notion_workspace(
+        monkeypatch,
+        [
+            _notion_page("page-1", "Restaking Thesis", "Web3 Research"),
+            _notion_page("page-2", "Quiet Noodle Shop", "Food and Places"),
+        ],
+    )
+    client.post("/onboarding/connect-source", data={"database_id": "db-1"})
+    connection = portal_connect(repository.path)
+    proposal_id = connection.execute(
+        "SELECT proposal_id FROM cloud_proposals WHERE tenant_id = ?", (user_id,)
+    ).fetchone()["proposal_id"]
+    connection.close()
+
+    response = client.post(
+        "/onboarding/confirm",
+        data={
+            "proposal_id": proposal_id,
+            "target_key:page-1": "research",
+            "label:page-1": "研究資料",
+            "exclude:page-2": "1",
+            "target_key:foreign-page": "food",
+            "label:foreign-page": "Do not trust this",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code in (302, 303)
+    items = {item.source_id: item for item in PortalRepository(repository.path).list_items(user_id)}
+    assert items["page-1"].cloud_key == "research"
+    assert "page-2" not in items
+
+
 def test_confirm_onboarding_without_a_proposal_id_redirects_safely(
     auth_app, repository, transport
 ):

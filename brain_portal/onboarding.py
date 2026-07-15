@@ -173,11 +173,49 @@ def confirm_clouds(
     accepted: Mapping[str, str],
     documents: Sequence[SourceDocument],
     embedder: EmbeddingProvider | None,
+    *,
+    edits: Mapping[str, CloudEdit] | None = None,
 ) -> OnboardingState:
     proposal = load_proposal(repository, tenant_id, proposal_id)
     if proposal is None:
         raise ValueError("unknown Cloud proposal")
 
+    if edits is None:
+        remap = _accepted_remap(proposal, accepted)
+        cloud_labels = {
+            key: CANONICAL_CLOUDS.get(key, key)
+            for key in set(remap.values())
+        }
+    else:
+        revised = revise_proposal(proposal, edits)
+        remap = {
+            source_id: group.key
+            for group in revised
+            for source_id in group.source_ids
+        }
+        cloud_labels = {group.key: group.label for group in revised}
+    remapped_documents = tuple(
+        replace(doc, cloud_key=remap.get(doc.source_id, doc.cloud_key))
+        for doc in documents
+        if doc.tenant_id == tenant_id and doc.source_id in remap
+    )
+
+    _set_onboarding_status(repository, tenant_id, "confirmed")
+    _store_cloud_labels(repository, tenant_id, cloud_labels)
+    if not remapped_documents:
+        _set_onboarding_status(repository, tenant_id, "ready")
+        return OnboardingState(tenant_id=tenant_id, status="ready")
+    source_type = remapped_documents[0].source_type if remapped_documents else "notion"
+    connector = _StaticConnector(source_type=source_type, documents=remapped_documents)
+    report = run_index(tenant_id, connector, repository, embedder)
+    status = "ready" if report.failed == 0 else "confirmed"
+    _set_onboarding_status(repository, tenant_id, status)
+    return OnboardingState(tenant_id=tenant_id, status=status)
+
+
+def _accepted_remap(
+    proposal: Sequence[CloudProposal], accepted: Mapping[str, str]
+) -> dict[str, str]:
     remap: dict[str, str] = {}
     for group in proposal:
         final_key = accepted.get(group.key, group.key)
@@ -185,19 +223,26 @@ def confirm_clouds(
             final_key = "ai"
         for source_id in group.source_ids:
             remap[source_id] = final_key
-    remapped_documents = tuple(
-        replace(doc, cloud_key=remap.get(doc.source_id, doc.cloud_key))
-        for doc in documents
-        if doc.tenant_id == tenant_id
-    )
+    return remap
 
-    _set_onboarding_status(repository, tenant_id, "confirmed")
-    source_type = remapped_documents[0].source_type if remapped_documents else "notion"
-    connector = _StaticConnector(source_type=source_type, documents=remapped_documents)
-    report = run_index(tenant_id, connector, repository, embedder)
-    status = "ready" if report.failed == 0 else "confirmed"
-    _set_onboarding_status(repository, tenant_id, status)
-    return OnboardingState(tenant_id=tenant_id, status=status)
+
+def _store_cloud_labels(
+    repository: PortalRepository, tenant_id: str, cloud_labels: Mapping[str, str]
+) -> None:
+    connection = portal_connect(repository.path)
+    try:
+        with connection:
+            for cloud_key, label in cloud_labels.items():
+                connection.execute(
+                    """
+                    INSERT INTO tenant_clouds (tenant_id, cloud_key, label)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT (tenant_id, cloud_key) DO UPDATE SET label = excluded.label
+                    """,
+                    (tenant_id, cloud_key, label),
+                )
+    finally:
+        connection.close()
 
 
 def _set_onboarding_status(repository: PortalRepository, tenant_id: str, status: str) -> None:
