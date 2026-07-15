@@ -123,11 +123,11 @@ def test_processor_returns_none_when_queue_is_empty(tmp_path):
     ) is None
 
 
-def test_processor_command_processes_at_most_one_job(monkeypatch, capsys):
+def test_processor_command_processes_at_most_one_job(monkeypatch, capsys, tmp_path):
     monkeypatch.setattr(
         process_notion_sync_jobs,
         "PortalSettings",
-        lambda: SimpleNamespace(database_path="test.sqlite3", gemini_api_key="", ai_timeout_seconds=20),
+        lambda: SimpleNamespace(database_path=str(tmp_path / "portal.sqlite3"), gemini_api_key="", ai_timeout_seconds=20),
     )
     monkeypatch.setattr(process_notion_sync_jobs, "PortalRepository", lambda path: "repo")
     monkeypatch.setattr(process_notion_sync_jobs, "process_next_notion_job", lambda *args: "completed")

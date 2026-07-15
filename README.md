@@ -251,3 +251,15 @@ python scripts/verify_go_live.py --portal https://你的-portal-render-url
 ```
 
 檢查器只回報缺少的環境變數名稱與 HTTP 狀態,不輸出 secret、magic-link token 或使用者內容。
+
+### Notion webhook 同步
+
+Portal 的公開 intake 是 `POST /hooks/notion/events`。它會驗證 `X-Notion-Signature`、以 Notion 的 `workspace_id` 對應既有 tenant，並只寫入去重後的同步工作；它不在 HTTP 請求內讀取 Notion 內容。
+
+以排程或受保護 worker 每次執行一筆工作：
+
+```bash
+python scripts/process_notion_sync_jobs.py
+```
+
+首次設置 Notion webhook 訂閱與外部排程前，必須先完成 production secret、durable hosting 與真人 OAuth 驗收；本機 SQLite 只能作為可重建 projection 的開發／受控 Beta 過渡方案。
