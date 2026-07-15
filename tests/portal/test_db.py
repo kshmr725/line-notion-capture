@@ -136,6 +136,32 @@ def test_get_item_returns_none_when_missing_or_wrong_tenant(tmp_path):
     assert repo.get_item("tenant-b", "page-1") is None
 
 
+def test_list_cloud_labels_is_ordered_and_tenant_scoped(tmp_path):
+    path = tmp_path / "portal.sqlite3"
+    init_portal_db(path)
+    repo = PortalRepository(path)
+    connection = portal_connect(path)
+    with connection:
+        connection.executemany(
+            "INSERT INTO tenants (tenant_id, display_name) VALUES (?, ?)",
+            (("tenant-a", "A"), ("tenant-b", "B")),
+        )
+        connection.executemany(
+            "INSERT INTO tenant_clouds (tenant_id, cloud_key, label) VALUES (?, ?, ?)",
+            (
+                ("tenant-a", "z-notes", "Z Notes"),
+                ("tenant-a", "research", "研究資料"),
+                ("tenant-b", "private", "Private Cloud"),
+            ),
+        )
+    connection.close()
+
+    assert repo.list_cloud_labels("tenant-a") == {
+        "research": "研究資料",
+        "z-notes": "Z Notes",
+    }
+
+
 def _record_sync_run(
     path, tenant_id: str, run_id: str, source_type: str, status: str, finished_at: str
 ) -> None:

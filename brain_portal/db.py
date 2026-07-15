@@ -544,6 +544,22 @@ class PortalRepository:
         finally:
             connection.close()
 
+    def list_cloud_labels(self, tenant_id: str) -> dict[str, str]:
+        connection = portal_connect(self.path)
+        try:
+            rows = connection.execute(
+                """
+                SELECT cloud_key, label
+                FROM tenant_clouds
+                WHERE tenant_id = ?
+                ORDER BY cloud_key
+                """,
+                (tenant_id,),
+            ).fetchall()
+            return {row["cloud_key"]: row["label"] for row in rows}
+        finally:
+            connection.close()
+
     def get_item(self, tenant_id: str, source_id: str) -> KnowledgeItem | None:
         connection = portal_connect(self.path)
         try:
