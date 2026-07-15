@@ -21,6 +21,7 @@ from brain_portal.db import portal_connect
 from brain_portal.embeddings import GeminiEmbeddingProvider
 from brain_portal.models import AuthenticatedPrincipal, CloudEdit, OnboardingState, TenantContext
 from brain_portal.onboarding import (
+    cloud_key_for_label,
     confirm_clouds,
     load_proposal,
     propose_clouds,
@@ -410,11 +411,14 @@ def _latest_proposal(repository, tenant_id: str):
 def _proposal_edits_from_form(proposal, form) -> dict[str, CloudEdit]:
     """Read edits only for source ids owned by the trusted proposal."""
     edits: dict[str, CloudEdit] = {}
+    known_labels = {group.label: group.key for group in proposal}
     for group in proposal:
         for source_id in group.source_ids:
             target_key = form.get(f"target_key:{source_id}", "").strip()
             label = form.get(f"label:{source_id}", "").strip()
             excluded = form.get(f"exclude:{source_id}") == "1"
+            if label and not target_key:
+                target_key = known_labels.get(label, cloud_key_for_label(label))
             if target_key or label or excluded:
                 edits[source_id] = CloudEdit(
                     target_key=target_key,

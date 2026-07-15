@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from brain_portal.db import PortalRepository, init_portal_db, portal_connect
-from brain_portal.models import SourceDocument
+from brain_portal.models import ProposalSource, SourceDocument
 from brain_portal.onboarding import (
     confirm_clouds,
     load_proposal,
@@ -93,6 +93,10 @@ def test_propose_clouds_groups_by_existing_cloud_key():
     assert by_key["web3"].confidence == 1.0
     assert by_key["food"].source_ids == ("c",)
     assert "ai" not in by_key
+    assert by_key["web3"].sources == (
+        ProposalSource(source_id="a", title="Restaking Thesis"),
+        ProposalSource(source_id="b", title="Another Web3 Note"),
+    )
 
 
 def test_propose_clouds_marks_unmapped_documents_as_a_low_confidence_group():

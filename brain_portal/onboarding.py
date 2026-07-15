@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import secrets
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
@@ -8,7 +9,13 @@ from typing import Callable, Mapping, Sequence
 
 from brain_portal.db import PortalRepository, portal_connect
 from brain_portal.indexer import EmbeddingProvider, run_index
-from brain_portal.models import CloudEdit, CloudProposal, OnboardingState, SourceDocument
+from brain_portal.models import (
+    CloudEdit,
+    CloudProposal,
+    OnboardingState,
+    ProposalSource,
+    SourceDocument,
+)
 
 
 CANONICAL_CLOUDS = {
@@ -43,6 +50,9 @@ def propose_clouds(documents: Sequence[SourceDocument]) -> tuple[CloudProposal, 
                 sample_titles=tuple(doc.title for doc in docs[:3]),
                 detected_fields=_detected_fields(docs),
                 source_ids=tuple(doc.source_id for doc in docs),
+                sources=tuple(
+                    ProposalSource(source_id=doc.source_id, title=doc.title) for doc in docs
+                ),
             )
         )
     return tuple(proposals)
@@ -69,12 +79,17 @@ def revise_proposal(
         for group in proposal
         for source_id in group.source_ids
     }
+    source_titles = {
+        source.source_id: source.title
+        for group in proposal
+        for source in group.sources
+    }
     grouped: dict[tuple[str, str], list[str]] = {}
     for source_id, original in source_groups.items():
         edit = edits.get(source_id, CloudEdit())
         if edit.excluded:
             continue
-        key = _safe_cloud_key(edit.target_key or original.key)
+        key = cloud_key_for_label(edit.target_key or original.key)
         label = (edit.label or CANONICAL_CLOUDS.get(key) or original.label).strip()
         grouped.setdefault((key, label), []).append(source_id)
     return tuple(
@@ -85,16 +100,25 @@ def revise_proposal(
             sample_titles=(),
             detected_fields=(),
             source_ids=tuple(source_ids),
+            sources=tuple(
+                ProposalSource(source_id=source_id, title=source_titles.get(source_id, source_id))
+                for source_id in source_ids
+            ),
         )
         for (key, label), source_ids in grouped.items()
     )
 
 
-def _safe_cloud_key(value: str) -> str:
+def cloud_key_for_label(value: str) -> str:
     candidate = "".join(
         char.lower() if char.isascii() and char.isalnum() else "-" for char in value.strip()
     ).strip("-")
-    return candidate[:40] or "unmapped"
+    if candidate:
+        return candidate[:40]
+    if value.strip():
+        digest = hashlib.sha256(value.strip().casefold().encode("utf-8")).hexdigest()[:12]
+        return f"custom-{digest}"
+    return "unmapped"
 
 
 def store_proposal(
@@ -114,6 +138,10 @@ def store_proposal(
                 "sample_titles": list(group.sample_titles),
                 "detected_fields": list(group.detected_fields),
                 "source_ids": list(group.source_ids),
+                "sources": [
+                    {"source_id": source.source_id, "title": source.title}
+                    for source in group.sources
+                ],
             }
             for group in proposal
         ]
@@ -161,6 +189,10 @@ def load_proposal(
             sample_titles=tuple(entry["sample_titles"]),
             detected_fields=tuple(entry["detected_fields"]),
             source_ids=tuple(entry["source_ids"]),
+            sources=tuple(
+                ProposalSource(source_id=source["source_id"], title=source["title"])
+                for source in entry.get("sources", ())
+            ),
         )
         for entry in json.loads(row["payload_json"])
     )

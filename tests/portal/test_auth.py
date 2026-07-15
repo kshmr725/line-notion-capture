@@ -769,6 +769,27 @@ def test_connect_source_submit_builds_a_proposal_and_advances_onboarding(
     assert "正在建立你的 Brain Cloud" not in onboarding_html
 
 
+def test_onboarding_proposal_has_accessible_per_source_cloud_controls(
+    auth_app, repository, transport, monkeypatch
+):
+    client = auth_app.test_client()
+    user_id = _sign_in(client, repository, transport, "friend@example.com")
+    _connect_notion(client, repository, transport, monkeypatch, user_id)
+    _mock_notion_workspace(
+        monkeypatch, [_notion_page("page-1", "Restaking Thesis", "Web3 Research")]
+    )
+    client.post("/onboarding/connect-source", data={"database_id": "db-1"})
+
+    html = client.get("/onboarding").get_data(as_text=True)
+
+    assert 'name="label:page-1"' in html
+    assert 'list="cloud-name-options"' in html
+    assert 'name="exclude:page-1"' in html
+    assert 'for="cloud-name-1-1"' in html
+    assert 'for="exclude-source-1-1"' in html
+    assert "不會修改你的 Notion 原始內容" in html
+
+
 def test_confirm_onboarding_indexes_the_proposed_items(
     auth_app, repository, transport, monkeypatch
 ):

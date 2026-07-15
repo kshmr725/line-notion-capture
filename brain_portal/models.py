@@ -60,6 +60,12 @@ class OnboardingState:
 
 
 @dataclass(frozen=True)
+class ProposalSource:
+    source_id: str
+    title: str
+
+
+@dataclass(frozen=True)
 class CloudProposal:
     key: str
     label: str
@@ -67,6 +73,7 @@ class CloudProposal:
     sample_titles: tuple[str, ...]
     detected_fields: tuple[str, ...]
     source_ids: tuple[str, ...]
+    sources: tuple[ProposalSource, ...] = ()
 
 
 @dataclass(frozen=True)

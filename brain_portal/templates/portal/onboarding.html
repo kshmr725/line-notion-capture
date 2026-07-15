@@ -16,21 +16,49 @@
   <p class="auth-status" role="status">連接 Notion（即將推出）</p>
   {% endif %}
   {% elif state.status == 'proposed' and proposal %}
-  <p>我們依照現有分類把你的內容分成以下幾組，確認後就會開始建立 Brain Cloud。</p>
-  <ul class="proposal-groups">
-    {% for group in proposal %}
-    <li>
-      <strong>{{ group.label }}</strong>
-      <span>{{ group.source_ids|length }} 筆{% if group.confidence < 1.0 %}（待確認）{% endif %}</span>
-      {% if group.sample_titles %}
-      <p class="auth-status" role="status">{{ group.sample_titles|join('、') }}</p>
-      {% endif %}
-    </li>
-    {% endfor %}
-  </ul>
-  <form method="post" action="{{ url_for('auth.confirm_onboarding') }}">
+  <p>AI 已依照內容提出分類。你可以直接改 Cloud 名稱：相同名稱會合併，不同名稱會拆分成新的 Cloud。</p>
+  <p class="proposal-safety" role="note">這些調整只會改變 Brain Cloud 的呈現方式，不會修改你的 Notion 原始內容。</p>
+  <form class="proposal-editor" method="post" action="{{ url_for('auth.confirm_onboarding') }}">
     <input type="hidden" name="proposal_id" value="{{ proposal_id }}">
-    <button type="submit" class="primary-action">接受並建立</button>
+    <datalist id="cloud-name-options">
+      {% for option in proposal %}<option value="{{ option.label }}"></option>{% endfor %}
+    </datalist>
+  <div class="proposal-groups">
+    {% for group in proposal %}
+    {% set group_index = loop.index %}
+    <section class="proposal-group" aria-labelledby="proposal-group-{{ group_index }}">
+      <div class="proposal-group-head">
+        <div>
+          <span class="eyebrow">AI 建議</span>
+          <h2 id="proposal-group-{{ group_index }}">{{ group.label }}</h2>
+        </div>
+        <span>{{ group.source_ids|length }} 筆{% if group.confidence < 1.0 %} · 待確認{% endif %}</span>
+      </div>
+      <div class="proposal-source-list">
+      {% for source in group.sources %}
+        <article class="proposal-source">
+          <div class="proposal-source-copy">
+            <strong>{{ source.title }}</strong>
+            <small>來源內容保持不變</small>
+          </div>
+          <div class="proposal-destination">
+            <label for="cloud-name-{{ group_index }}-{{ loop.index }}">Cloud 名稱</label>
+            <input id="cloud-name-{{ group_index }}-{{ loop.index }}" name="label:{{ source.source_id }}" value="{{ group.label }}" list="cloud-name-options" autocomplete="off">
+          </div>
+          <label class="proposal-exclude" for="exclude-source-{{ group_index }}-{{ loop.index }}">
+            <input id="exclude-source-{{ group_index }}-{{ loop.index }}" type="checkbox" name="exclude:{{ source.source_id }}" value="1">
+            <span>先不要加入</span>
+          </label>
+        </article>
+      {% endfor %}
+      </div>
+    </section>
+    {% endfor %}
+  </div>
+    <div class="proposal-actions">
+      <button type="submit" class="primary-action">確認分類並建立</button>
+      <span>之後仍可在設定中調整 Cloud。</span>
+    </div>
   </form>
   {% elif state.status in ('confirmed', 'indexing') %}
   <p>我們正在讀取你的來源並建立分類，這通常需要一到十分鐘。</p>
