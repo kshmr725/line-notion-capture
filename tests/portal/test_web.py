@@ -73,6 +73,7 @@ class FakeRepository:
         ]
         self.tenant_calls = []
         self.sync_by_type = {}
+        self.cloud_labels = {}
 
     def list_items(self, tenant_id: str):
         self.tenant_calls.append(tenant_id)
@@ -80,6 +81,9 @@ class FakeRepository:
 
     def latest_sync(self, tenant_id: str, source_type: str | None = None):
         return self.sync_by_type.get(source_type)
+
+    def list_cloud_labels(self, tenant_id: str):
+        return dict(self.cloud_labels)
 
 
 class TenantResolver:
@@ -159,6 +163,31 @@ def test_home_is_a_compact_cloud_workbench_with_real_counts(portal_setup):
     assert "尚未索引" in html
     assert 'class="continue-list"' in html
     assert "Find a useful note, then follow its sources." not in html
+
+
+def test_custom_cloud_appears_consistently_in_home_nav_search_and_item_labels():
+    repository = FakeRepository()
+    repository.cloud_labels = {"research": "研究資料"}
+    repository.items.append(item("custom-note", cloud_key="research"))
+    app = create_app(
+        dependencies=PortalDependencies(
+            repository, TenantResolver(), SearchService(), AnswerService(False)
+        )
+    )
+    app.config.update(TESTING=True)
+    client = app.test_client()
+
+    home = client.get("/").get_data(as_text=True)
+    search_html = client.get("/search").get_data(as_text=True)
+    item_html = client.get("/item/custom-note").get_data(as_text=True)
+
+    assert 'data-cloud-key="research"' in home
+    assert 'href="/cloud/research"' in home
+    assert "研究資料" in home
+    assert '<option value="research"' in search_html
+    assert ">研究資料</option>" in search_html
+    assert "研究資料" in item_html
+    assert "Private Cloud" not in home + search_html + item_html
 
 
 def test_cloud_gallery_header_opens_an_input_ready_search(portal_setup):

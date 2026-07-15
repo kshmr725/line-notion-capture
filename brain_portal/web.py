@@ -61,6 +61,9 @@ class ItemRepository(Protocol):
     ) -> SyncRun | None:
         ...
 
+    def list_cloud_labels(self, tenant_id: str) -> dict[str, str]:
+        ...
+
 
 TenantResolver = Callable[[], Optional[TenantContext]]
 SearchService = Callable[[str, str, Optional[str]], SearchResults]
@@ -136,7 +139,14 @@ def create_portal_blueprint(dependencies: PortalDependencies) -> Blueprint:
         active_cloud = None
         if request.endpoint == "portal.cloud":
             active_cloud = request.view_args.get("key") if request.view_args else None
-        return {"nav_clouds": CLOUDS, "active_cloud_key": active_cloud}
+        try:
+            _tenant_items(dependencies)
+        except PortalDataUnavailable:
+            pass
+        return {
+            "nav_clouds": getattr(g, "portal_clouds", CLOUDS),
+            "active_cloud_key": active_cloud,
+        }
 
     @portal.errorhandler(PortalDataUnavailable)
     def service_unavailable(error):
@@ -163,6 +173,7 @@ def create_portal_blueprint(dependencies: PortalDependencies) -> Blueprint:
     @portal.get("/search")
     def search():
         items = _tenant_items(dependencies)
+        clouds = _request_clouds()
         query = request.args.get("q", "").strip()
         cloud_key = request.args.get("cloud", "").strip() or None
         item_type = request.args.get("type", "").strip() or None
@@ -173,7 +184,7 @@ def create_portal_blueprint(dependencies: PortalDependencies) -> Blueprint:
         view = {
             "query": query[:QUERY_LIMIT],
             "cloud_key": cloud_key,
-            "clouds": CLOUDS,
+            "clouds": clouds,
             "results": [],
             "answer": None,
             "degraded": False,
@@ -263,10 +274,11 @@ def create_portal_blueprint(dependencies: PortalDependencies) -> Blueprint:
 
     @portal.get("/cloud/<key>")
     def cloud(key: str):
-        cloud_definition = next((cloud for cloud in CLOUDS if cloud["key"] == key), None)
+        all_items = _tenant_items(dependencies)
+        clouds = _request_clouds()
+        cloud_definition = next((cloud for cloud in clouds if cloud["key"] == key), None)
         if cloud_definition is None:
             abort(404)
-        all_items = _tenant_items(dependencies)
         items = [item for item in all_items if item.cloud_key == key]
         cloud_view = dict(cloud_definition)
         cloud_view["filters"] = [
@@ -285,7 +297,7 @@ def create_portal_blueprint(dependencies: PortalDependencies) -> Blueprint:
                 "name": cloud["name"],
                 "url": url_for("portal.cloud", key=cloud["key"]),
             }
-            for cloud in CLOUDS
+            for cloud in clouds
             if cloud["key"] in available_clouds
         ]
         return render_template(
@@ -296,7 +308,7 @@ def create_portal_blueprint(dependencies: PortalDependencies) -> Blueprint:
             items=[_item_card(item) for item in items],
             concepts=concepts,
             adjacent_clouds=adjacent,
-            workspace=_cloud_workspace(items, key, all_items),
+            workspace=_cloud_workspace(items, key, all_items, cloud_definition),
         )
 
     @portal.get("/item/<path:source_id>")
@@ -601,16 +613,74 @@ def create_portal_blueprint(dependencies: PortalDependencies) -> Blueprint:
 
 
 def _tenant_items(dependencies: PortalDependencies) -> list[KnowledgeItem]:
+    cached = getattr(g, "portal_items", None)
+    if cached is not None:
+        return cached
     tenant_id = g.portal_tenant.tenant_id
     try:
         raw_items = dependencies.repository.list_items(tenant_id)
     except Exception:
         raise PortalDataUnavailable() from None
-    return [
+    items = [
         item
         for item in raw_items
         if item.tenant_id == tenant_id
     ]
+    g.portal_items = items
+    g.portal_clouds = _cloud_catalog(dependencies, items)
+    return items
+
+
+def _cloud_catalog(
+    dependencies: PortalDependencies, items: list[KnowledgeItem]
+) -> tuple[dict[str, object], ...]:
+    tenant_id = g.portal_tenant.tenant_id
+    label_loader = getattr(dependencies.repository, "list_cloud_labels", None)
+    try:
+        stored_labels = label_loader(tenant_id) if callable(label_loader) else {}
+    except Exception:
+        raise PortalDataUnavailable() from None
+    definitions: dict[str, dict[str, object]] = {}
+    for canonical in CLOUDS:
+        definition = dict(canonical)
+        if stored_labels.get(definition["key"]):
+            definition["name"] = stored_labels[definition["key"]]
+            definition["short_name"] = stored_labels[definition["key"]]
+        definition["is_custom"] = False
+        definitions[definition["key"]] = definition
+    item_keys = {item.cloud_key for item in items if item.cloud_key}
+    for key in sorted((set(stored_labels) | item_keys) - set(definitions)):
+        label = str(stored_labels.get(key) or public_cloud_label(key)).strip() or key
+        definitions[key] = {
+            "key": key,
+            "name": label,
+            "short_name": label,
+            "icon_name": "grid",
+            "description": "依你命名的分類，集中查看相關筆記與延伸主題。",
+            "filters": ("所有內容", "最近更新", "延伸主題"),
+            "filter_labels": ("所有內容", "最近更新", "延伸主題"),
+            "paths": ("瀏覽所有內容", "探索相關主題"),
+            "is_custom": True,
+        }
+    canonical_keys = [cloud["key"] for cloud in CLOUDS]
+    custom_keys = sorted(
+        (key for key in definitions if key not in canonical_keys),
+        key=lambda key: str(definitions[key]["name"]).casefold(),
+    )
+    return tuple(definitions[key] for key in (*canonical_keys, *custom_keys))
+
+
+def _request_clouds() -> tuple[dict[str, object], ...]:
+    return tuple(getattr(g, "portal_clouds", CLOUDS))
+
+
+def _request_cloud_definition(key: str) -> dict[str, object] | None:
+    return next((cloud for cloud in _request_clouds() if cloud["key"] == key), None)
+
+
+def _request_cloud_label(key: str) -> str:
+    definition = _request_cloud_definition(key)
+    return str(definition["name"]) if definition is not None else public_cloud_label(key)
 
 
 def _find_item(items: list[KnowledgeItem], source_id: str) -> KnowledgeItem | None:
@@ -632,7 +702,7 @@ def _item_card(item: KnowledgeItem) -> dict[str, object]:
         "summary": clean_display_text(item.summary),
         "display_summary": reader_summary(item.summary, facts),
         "cloud_key": item.cloud_key,
-        "cloud_label": public_cloud_label(item.cloud_key),
+        "cloud_label": _request_cloud_label(item.cloud_key),
         "item_type": item.item_type,
         "item_type_label": public_type_label(item.item_type),
         "icon_name": icon_name_for_item(item),
@@ -684,7 +754,7 @@ def _sync_status_label(
 
 
 def _breadcrumbs(item: KnowledgeItem) -> list[dict[str, str | None]]:
-    cloud = next((cloud for cloud in CLOUDS if cloud["key"] == item.cloud_key), None)
+    cloud = _request_cloud_definition(item.cloud_key)
     values = [{"label": "Home", "url": url_for("portal.home")}]
     if cloud is not None:
         values.append(
@@ -780,7 +850,7 @@ def _filter_summary(
 ) -> str:
     values = []
     if cloud_key:
-        values.append(public_cloud_label(cloud_key))
+        values.append(_request_cloud_label(cloud_key))
     if item_type:
         values.append(public_type_label(item_type))
     if concept:
@@ -837,7 +907,7 @@ def _answer_view(
 
 def _cloud_cards(items: list[KnowledgeItem]) -> list[dict[str, object]]:
     cards = []
-    for cloud in CLOUDS:
+    for cloud in _request_clouds():
         cloud_items = [item for item in items if item.cloud_key == cloud["key"]]
         card = dict(cloud)
         card.update(
@@ -860,9 +930,11 @@ def _freshness_label(items: list[KnowledgeItem]) -> str:
 
 
 def _cloud_workspace(
-    items: list[KnowledgeItem], key: str, all_items: list[KnowledgeItem]
+    items: list[KnowledgeItem],
+    key: str,
+    all_items: list[KnowledgeItem],
+    definition: dict[str, object],
 ) -> dict[str, object]:
-    definition = next(cloud for cloud in CLOUDS if cloud["key"] == key)
     filter_labels = definition.get("filter_labels", definition["filters"])
     tabs = [
         {
