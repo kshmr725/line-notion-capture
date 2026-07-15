@@ -15,6 +15,20 @@ Security contract:
 
 Verification: `387 passed`, focused webhook/job suite passes, `git diff --check` clean, and the processor command returns `idle` on an empty initialized database.
 
+## Editable Cloud proposal continuation
+
+Local `main` now also includes the user-decision layer before first indexing:
+
+- `4f149c1`: pure source-level Cloud proposal revision model.
+- `32c56f1`: tenant-scoped confirmation, exclusions, and persisted custom labels.
+- `e0c0647`: accessible per-source Cloud-name editor and exclusion controls.
+
+The user edits only the Portal projection. The flow never writes, moves, or deletes Notion/Obsidian source content. Submitted source IDs are accepted only when they belong to the authenticated tenant's stored proposal. Matching Cloud names merge; new names split into deterministic custom keys; excluded sources are omitted from the projection.
+
+Verification after this continuation: `391 passed` and `git diff --check` clean.
+
+Remaining product work: read `tenant_clouds` in the Portal shell so custom names become first-class homepage cards, navigation entries, search filters, and `/cloud/<custom-key>` pages. Until then the editor is safe and persists the decision, but the three canonical Cloud workspaces remain the only dedicated navigation views.
+
 External work still required before production:
 
 1. Create/authorize the Notion public OAuth app and configure its callback.

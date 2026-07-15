@@ -252,6 +252,12 @@ python scripts/verify_go_live.py --portal https://你的-portal-render-url
 
 檢查器只回報缺少的環境變數名稱與 HTTP 狀態,不輸出 secret、magic-link token 或使用者內容。
 
+### 使用者確認 Cloud 分類
+
+Notion 首次連接後，Portal 會先顯示 AI 建議的分類預覽。使用者可以逐筆修改 `Cloud 名稱`：相同名稱會合併、不同名稱會建立新的 Cloud，也可以勾選「先不要加入」排除該筆資料。
+
+這些操作只改變 Portal 的唯讀投影，不會回寫、移動或刪除 Notion／Obsidian 原始內容。伺服器只接受當前登入使用者 proposal 內的 source ID；偽造或其他 tenant 的 ID 會被忽略。自訂 Cloud 名稱已保存於 `tenant_clouds`，但自訂 Cloud 的動態首頁卡片與導覽仍屬下一階段，現有 Web3／美食／AI 三個專屬視圖不受影響。
+
 ### Notion webhook 同步
 
 Portal 的公開 intake 是 `POST /hooks/notion/events`。它會驗證 `X-Notion-Signature`、以 Notion 的 `workspace_id` 對應既有 tenant，並只寫入去重後的同步工作；它不在 HTTP 請求內讀取 Notion 內容。
