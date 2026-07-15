@@ -6,6 +6,7 @@ import time
 from urllib.parse import quote, urljoin
 
 from flask import Flask, jsonify, render_template_string, request
+from werkzeug.middleware.dispatcher import DispatcherMiddleware
 
 import capture_store
 from config import settings
@@ -14,9 +15,12 @@ from line_client import push_text, reply_text, verify_signature
 from llm_router import organize
 from notion_writer import create_capture_page
 import user_store
+from shared_portal import create_shared_portal
 
 app = Flask(__name__)
 app.config["DRY_RUN_VISIBLE"] = settings.dry_run
+shared_portal = create_shared_portal(settings)
+app.wsgi_app = DispatcherMiddleware(app.wsgi_app, {"/brain": shared_portal})
 
 
 @app.get("/health")

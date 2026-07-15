@@ -39,6 +39,7 @@ def create_app(
     )
     init_portal_db(settings.database_target)
     repository = PortalRepository(settings.database_target)
+    app.extensions["portal_repository"] = repository
     mail_transport = build_mail_transport(settings)
     app.extensions["mail_transport"] = mail_transport
     app.register_blueprint(
