@@ -62,4 +62,4 @@
 
 - [x] **Step 1:** Document that edits change only the portal projection, not the source workspace.
 - [x] **Step 2:** Run `pytest -q` and `git diff --check`.
-- [ ] **Step 3:** Record checkpoint including remaining dynamic custom-Cloud navigation work.
+- [x] **Step 3:** Record checkpoint including remaining dynamic custom-Cloud navigation work.
