@@ -96,6 +96,32 @@ CREATE TABLE IF NOT EXISTS source_connections (
     FOREIGN KEY (tenant_id) REFERENCES tenants (tenant_id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS notion_webhook_events (
+    event_id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    workspace_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    page_id TEXT NOT NULL,
+    received_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    FOREIGN KEY (tenant_id) REFERENCES tenants (tenant_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS notion_sync_jobs (
+    event_id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    page_id TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'queued',
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    started_at TEXT,
+    finished_at TEXT,
+    error_code TEXT,
+    FOREIGN KEY (event_id) REFERENCES notion_webhook_events (event_id) ON DELETE CASCADE,
+    FOREIGN KEY (tenant_id) REFERENCES tenants (tenant_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS notion_sync_jobs_next_idx
+    ON notion_sync_jobs (status, created_at);
+
 CREATE TABLE IF NOT EXISTS knowledge_items (
     tenant_id TEXT NOT NULL,
     source_id TEXT NOT NULL,
