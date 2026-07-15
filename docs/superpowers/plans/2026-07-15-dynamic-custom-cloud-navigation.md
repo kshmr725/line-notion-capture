@@ -76,4 +76,4 @@
 - [x] Document dynamic custom Cloud behavior and the projection-only boundary.
 - [x] Run `.venv/bin/python -m pytest -q` and `git diff --check`.
 - [x] Browser-verify home, custom Cloud, search filter, and responsive navigation.
-- [ ] Record a handoff checkpoint with remaining external deployment blockers.
+- [x] Record a handoff checkpoint with remaining external deployment blockers.
