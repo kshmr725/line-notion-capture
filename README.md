@@ -239,3 +239,15 @@ Rollback:
 - Render 上的 `brain-cloud-portal` service 與 `line-notion-capture` 是分開部署,回滾其中一個不會影響另一個。
 
 白話:Portal 出問題最壞情況就是刪掉投影資料庫重建,原始資料永遠在 Obsidian/Notion,不會遺失。
+
+### Controlled Beta 登入設定
+
+一般使用者版本不設定 `PORTAL_TENANT_ID`,而是由登入 session 決定 tenant。Production 必須設定 `PORTAL_SESSION_SECRET`、`PORTAL_SMTP_*`、`NOTION_OAUTH_*` 與 `PORTAL_TOKEN_ENCRYPTION_KEY`;缺少 SMTP 設定時服務會拒絕啟動,不會產生無法寄出的登入連結。
+
+`PORTAL_DEV_AUTH=true` 只供本機自動化測試使用,公開環境必須保持 `false`。部署後執行:
+
+```bash
+python scripts/verify_go_live.py --portal https://你的-portal-render-url
+```
+
+檢查器只回報缺少的環境變數名稱與 HTTP 狀態,不輸出 secret、magic-link token 或使用者內容。

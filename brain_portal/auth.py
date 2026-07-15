@@ -4,7 +4,9 @@ import base64
 import hashlib
 import json
 import secrets
+import smtplib
 from datetime import datetime, timedelta, timezone
+from email.message import EmailMessage
 from typing import Callable, Optional
 from urllib.parse import urlencode
 
@@ -50,6 +52,53 @@ class NullMailTransport(MailTransport):
 
     def send_magic_link(self, email: str, verify_url: str) -> None:
         self.sent.append((email, verify_url))
+
+
+class SmtpMailTransport(MailTransport):
+    """Deliver one-time login links through a deployment-provided SMTP relay."""
+
+    def __init__(self, settings: PortalSettings, *, smtp_factory=None) -> None:
+        self.settings = settings
+        self.smtp_factory = smtp_factory or smtplib.SMTP
+
+    def send_magic_link(self, email: str, verify_url: str) -> None:
+        message = EmailMessage()
+        message["Subject"] = "登入 Brain Cloud"
+        message["From"] = self.settings.smtp_from_email
+        message["To"] = email
+        message.set_content(
+            "使用以下一次性連結登入 Brain Cloud：\n\n"
+            f"{verify_url}\n\n"
+            f"連結將在 {self.settings.magic_link_ttl_minutes} 分鐘後失效。"
+        )
+        with self.smtp_factory(
+            self.settings.smtp_host,
+            self.settings.smtp_port,
+            timeout=self.settings.smtp_timeout_seconds,
+        ) as client:
+            if self.settings.smtp_use_tls:
+                client.starttls()
+            if self.settings.smtp_username:
+                client.login(
+                    self.settings.smtp_username, self.settings.smtp_password
+                )
+            client.send_message(message)
+
+
+def build_mail_transport(settings: PortalSettings) -> MailTransport:
+    """Select deterministic local delivery or require complete production SMTP."""
+    if settings.dev_auth or settings.tenant_id.strip() or not settings.session_secret.strip():
+        return NullMailTransport()
+    required = {
+        "PORTAL_SMTP_HOST": settings.smtp_host,
+        "PORTAL_SMTP_USERNAME": settings.smtp_username,
+        "PORTAL_SMTP_PASSWORD": settings.smtp_password,
+        "PORTAL_SMTP_FROM_EMAIL": settings.smtp_from_email,
+    }
+    missing = [name for name, value in required.items() if not str(value).strip()]
+    if missing:
+        raise RuntimeError("Missing production SMTP configuration: " + ", ".join(missing))
+    return SmtpMailTransport(settings)
 
 
 def _default_clock() -> datetime:

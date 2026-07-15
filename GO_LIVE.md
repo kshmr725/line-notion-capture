@@ -182,16 +182,17 @@ Brain Cloud Portal 是 `render.yaml` 裡另一個 service (`brain-cloud-portal`)
 ### 部署前
 
 1. 在 Render 建立 `brain-cloud-portal` service(`render.yaml` 已含宣告),`startCommand` 是 `gunicorn portal_app:app`。
-2. 依 `.env.example` 填 `PORTAL_TENANT_ID`、`PORTAL_TENANT_NAME`、`PORTAL_OBSIDIAN_ROOT`(如用 Obsidian)、`GEMINI_API_KEY`、`NOTION_TOKEN`、`NOTION_WEBHOOK_SECRET`(如用 Notion guided editing)。
-3. 索引一次資料:`python scripts/index_brain_portal.py --tenant kevin --obsidian-root <vault path> --database data/brain-portal.sqlite3`。
+2. Controlled Beta 不設定 `PORTAL_TENANT_ID`;依 `.env.example` 設定 `PORTAL_SESSION_SECRET`、`PORTAL_SMTP_*`、`NOTION_OAUTH_*`、`PORTAL_TOKEN_ENCRYPTION_KEY`、AI provider keys 與 `NOTION_WEBHOOK_SECRET`。
+3. `PORTAL_DEV_AUTH` 必須是 `false`;缺少 production SMTP 時服務會 fail closed。
+4. 在 Notion integration 後台把 callback 設為 `NOTION_OAUTH_REDIRECT_URL`,但啟用真實 OAuth 與 webhook 前仍需產品負責人明確授權。
 
 ### 驗收
 
 ```bash
-python scripts/verify_brain_portal.py --tenant kevin --database data/brain-portal.sqlite3
+python scripts/verify_go_live.py --portal https://你的-portal-render-url
 ```
 
-期待輸出 `"valid": true`,`tenant_leaks`、`missing_canonical_refs`、`unsafe_canonical_refs`、`stale_syncs` 全部是空陣列。
+期待 Portal environment、匿名登入閘門與登入頁全部顯示 `OK`。資料投影另用 `verify_brain_portal.py` 驗證。
 
 ### Stale 復原步驟
 

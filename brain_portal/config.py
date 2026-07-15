@@ -25,6 +25,13 @@ class PortalSettings:
     session_ttl_days: int = int(os.getenv("PORTAL_SESSION_TTL_DAYS", "14"))
     magic_link_ttl_minutes: int = int(os.getenv("PORTAL_MAGIC_LINK_TTL_MINUTES", "15"))
     dev_auth: bool = os.getenv("PORTAL_DEV_AUTH", "false").strip().lower() == "true"
+    smtp_host: str = os.getenv("PORTAL_SMTP_HOST", "")
+    smtp_port: int = int(os.getenv("PORTAL_SMTP_PORT", "587"))
+    smtp_username: str = os.getenv("PORTAL_SMTP_USERNAME", "")
+    smtp_password: str = os.getenv("PORTAL_SMTP_PASSWORD", "")
+    smtp_from_email: str = os.getenv("PORTAL_SMTP_FROM_EMAIL", "")
+    smtp_use_tls: bool = os.getenv("PORTAL_SMTP_USE_TLS", "true").strip().lower() == "true"
+    smtp_timeout_seconds: float = float(os.getenv("PORTAL_SMTP_TIMEOUT_SECONDS", "20"))
     notion_oauth_client_id: str = os.getenv("NOTION_OAUTH_CLIENT_ID", "")
     notion_oauth_client_secret: str = os.getenv("NOTION_OAUTH_CLIENT_SECRET", "")
     notion_oauth_redirect_url: str = os.getenv("NOTION_OAUTH_REDIRECT_URL", "")

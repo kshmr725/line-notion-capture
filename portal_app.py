@@ -8,7 +8,7 @@ from brain_portal.answers import (
     answer_query,
 )
 from brain_portal.auth import (
-    NullMailTransport,
+    build_mail_transport,
     create_auth_blueprint,
     create_authenticated_tenant_resolver,
     resolve_principal,
@@ -33,7 +33,7 @@ def create_app(
         PORTAL_TENANT_NAME=settings.tenant_name,
     )
     repository = PortalRepository(settings.database_path)
-    mail_transport = NullMailTransport()
+    mail_transport = build_mail_transport(settings)
     app.extensions["mail_transport"] = mail_transport
     app.register_blueprint(
         create_auth_blueprint(settings, repository, mail_transport=mail_transport)

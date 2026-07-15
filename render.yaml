@@ -30,11 +30,25 @@ services:
     envVars:
       - key: PORTAL_DATABASE_PATH
         value: data/brain-portal.sqlite3
-      - key: PORTAL_TENANT_ID
+      - key: PORTAL_DEV_AUTH
+        value: false
+      - key: PORTAL_SESSION_SECRET
         sync: false
-      - key: PORTAL_TENANT_NAME
+      - key: PORTAL_SMTP_HOST
         sync: false
-      - key: PORTAL_OBSIDIAN_ROOT
+      - key: PORTAL_SMTP_USERNAME
+        sync: false
+      - key: PORTAL_SMTP_PASSWORD
+        sync: false
+      - key: PORTAL_SMTP_FROM_EMAIL
+        sync: false
+      - key: NOTION_OAUTH_CLIENT_ID
+        sync: false
+      - key: NOTION_OAUTH_CLIENT_SECRET
+        sync: false
+      - key: NOTION_OAUTH_REDIRECT_URL
+        sync: false
+      - key: PORTAL_TOKEN_ENCRYPTION_KEY
         sync: false
       - key: GEMINI_API_KEY
         sync: false
