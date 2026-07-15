@@ -8,8 +8,10 @@ from brain_portal.onboarding import (
     confirm_clouds,
     load_proposal,
     propose_clouds,
+    revise_proposal,
     store_proposal,
 )
+from brain_portal.models import CloudEdit
 
 
 class FakeEmbedder:
@@ -128,6 +130,33 @@ def test_propose_clouds_never_mutates_input_documents():
 
     assert documents[0] is original
     assert documents[0].cloud_key == "web3"
+
+
+def test_revise_proposal_can_merge_split_and_exclude_without_mutating_source_groups():
+    proposal = propose_clouds(
+        (
+            _doc("a", "Restaking Thesis", cloud_key="web3"),
+            _doc("b", "Quiet Noodle Shop", cloud_key="food"),
+            _doc("c", "Agent Guide", cloud_key="ai"),
+        )
+    )
+
+    revised = revise_proposal(
+        proposal,
+        {
+            "a": CloudEdit(target_key="research", label="研究資料"),
+            "b": CloudEdit(target_key="research", label="研究資料"),
+            "c": CloudEdit(excluded=True),
+            "foreign": CloudEdit(target_key="ignored", label="Ignored"),
+        },
+    )
+
+    assert len(revised) == 1
+    [group] = revised
+    assert group.key == "research"
+    assert group.label == "研究資料"
+    assert group.source_ids == ("a", "b")
+    assert proposal[0].source_ids == ("a",)
 
 
 def test_store_and_load_proposal_round_trips(repository):

@@ -8,7 +8,7 @@ from typing import Callable, Mapping, Sequence
 
 from brain_portal.db import PortalRepository, portal_connect
 from brain_portal.indexer import EmbeddingProvider, run_index
-from brain_portal.models import CloudProposal, OnboardingState, SourceDocument
+from brain_portal.models import CloudEdit, CloudProposal, OnboardingState, SourceDocument
 
 
 CANONICAL_CLOUDS = {
@@ -58,6 +58,43 @@ def _detected_fields(docs: Sequence[SourceDocument]) -> tuple[str, ...]:
         if doc.metadata.get("summary"):
             fields.add("summary")
     return tuple(sorted(fields))
+
+
+def revise_proposal(
+    proposal: Sequence[CloudProposal], edits: Mapping[str, CloudEdit]
+) -> tuple[CloudProposal, ...]:
+    """Apply source-level proposal edits without changing sources or the stored proposal."""
+    source_groups = {
+        source_id: group
+        for group in proposal
+        for source_id in group.source_ids
+    }
+    grouped: dict[tuple[str, str], list[str]] = {}
+    for source_id, original in source_groups.items():
+        edit = edits.get(source_id, CloudEdit())
+        if edit.excluded:
+            continue
+        key = _safe_cloud_key(edit.target_key or original.key)
+        label = (edit.label or CANONICAL_CLOUDS.get(key) or original.label).strip()
+        grouped.setdefault((key, label), []).append(source_id)
+    return tuple(
+        CloudProposal(
+            key=key,
+            label=label,
+            confidence=1.0,
+            sample_titles=(),
+            detected_fields=(),
+            source_ids=tuple(source_ids),
+        )
+        for (key, label), source_ids in grouped.items()
+    )
+
+
+def _safe_cloud_key(value: str) -> str:
+    candidate = "".join(
+        char.lower() if char.isascii() and char.isalnum() else "-" for char in value.strip()
+    ).strip("-")
+    return candidate[:40] or "unmapped"
 
 
 def store_proposal(

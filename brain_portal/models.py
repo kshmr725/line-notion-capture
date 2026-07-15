@@ -70,6 +70,13 @@ class CloudProposal:
 
 
 @dataclass(frozen=True)
+class CloudEdit:
+    target_key: str = ""
+    label: str = ""
+    excluded: bool = False
+
+
+@dataclass(frozen=True)
 class DerivedView:
     kind: str
     cloud_key: str
