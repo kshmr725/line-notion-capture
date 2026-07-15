@@ -144,6 +144,10 @@ button:active, .primary-action:active { transform: translateY(1px) scale(.99); }
 .path-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .path-list a { display: flex; justify-content: space-between; align-items: center; min-height: 52px; padding: 10px 13px; border: 1px solid var(--portal-line); border-radius: 12px; background: var(--portal-paper); }
 .path-list a:hover { border-color: var(--portal-amber-strong); }
+.custom-cloud-grid { grid-template-columns: minmax(0, 1.25fr) minmax(240px, .75fr); }
+.custom-cloud-guide { align-self: start; padding: 18px; border: 1px solid var(--portal-line); border-radius: 15px; background: var(--portal-paper); }
+.custom-cloud-guide h2 { margin: 0 0 8px; font-size: 1rem; }
+.custom-cloud-guide p { margin: 0; color: var(--portal-muted); font-size: .86rem; }
 
 .food-grid { grid-template-columns: minmax(0, 1.2fr) minmax(0, .8fr); align-items: start; }
 .food-panel { min-width: 0; }
@@ -291,7 +295,7 @@ button:active, .primary-action:active { transform: translateY(1px) scale(.99); }
   .cloud-rail-nav { display: flex; gap: 4px; }
   .cloud-rail-nav a, .rail-utility { min-height: 44px; flex: 0 0 auto; }
   .rail-utility { margin: 0 0 0 4px; border-top: 0; border-left: 1px solid var(--portal-line); padding-top: 10px; }
-  .domain-grid, .food-grid { grid-template-columns: 1fr; }
+  .domain-grid, .food-grid, .custom-cloud-grid { grid-template-columns: 1fr; }
   .reader-layout { grid-template-columns: 1fr; gap: 8px; }
   .item-metadata { position: static; float: none; width: 100%; margin: 24px 0; }
   .intent-links { grid-template-columns: repeat(2, minmax(0, 1fr)); }

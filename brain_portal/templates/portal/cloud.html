@@ -6,10 +6,12 @@
     <div><p class="eyebrow">{{ cloud.short_name }}</p><h1>{{ cloud.name }}</h1><p>{{ cloud.description }}</p></div>
     <div class="cloud-workspace-actions">
       <a class="quiet-action" href="{{ url_for('portal.search', cloud=cloud.key) }}">搜尋這個 Cloud</a>
+      {% if not cloud.is_custom %}
       <a class="quiet-action" href="{{ url_for('portal.view_builder', cloud=cloud.key) }}">轉成表格</a>
       <a class="quiet-action" href="{{ url_for('portal.view_chart', cloud=cloud.key) }}">看圖表</a>
       <a class="quiet-action" href="{{ url_for('portal.view_slides', cloud=cloud.key) }}">看簡報</a>
       <a class="quiet-action" href="{{ url_for('portal.view_briefing', cloud=cloud.key) }}">生成摘要</a>
+      {% endif %}
     </div>
   </header>
   <nav id="cloud-filters" class="workspace-tabs" aria-label="{{ cloud.name }} 篩選">
@@ -34,12 +36,26 @@
       <div class="continue-list place-list">{% for item in workspace.places %}<a class="continue-row" data-source-id="{{ item.source_id }}" data-place-source-id="{{ item.source_id }}" href="{{ item.place_url or item.url }}"><span class="row-icon">{{ icon(item.icon_name) }}</span><span class="row-content"><strong>{{ item.place.name or item.title }}</strong><small>{% if item.has_coordinates %}{{ item.place.area or item.place.category or '已定位' }}{% else %}待補位置{% endif %}</small></span><span class="cloud-badge cloud-food">地點</span></a>{% else %}<p class="empty-inline">尚未有含地點資料的筆記。</p>{% endfor %}</div>
     </div>
   </section>
-  {% else %}
+  {% elif cloud.key == 'ai' %}
   <section id="ai-workspace" class="domain-grid ai-grid" aria-labelledby="ai-title">
     <div class="workspace-section"><div class="section-head"><h2 id="ai-title">可重用的方法</h2><span>{{ workspace.item_count }} 筆</span></div>
       <div class="continue-list">{% for item in workspace.recent %}<a class="continue-row" data-source-id="{{ item.source_id }}" href="{{ item.url }}"><span class="row-icon">{{ icon(item.icon_name) }}</span><span class="row-content"><strong>{{ item.title }}</strong><small>{{ item.display_summary }}</small></span><span class="cloud-badge cloud-ai">{{ item.item_type_label }}</span></a>{% else %}<p class="empty-inline">尚未索引 AI 自動化筆記。</p>{% endfor %}</div>
     </div>
     <aside class="workspace-section ai-guide"><h2>如何使用</h2><p>先從工具、Agent、MCP 或工作流進入，再用搜尋把相關主題串起來。</p></aside>
+  </section>
+  {% else %}
+  <section id="custom-cloud-workspace" class="domain-grid custom-cloud-grid" aria-labelledby="custom-cloud-title">
+    <div class="workspace-section">
+      <div class="section-head"><h2 id="custom-cloud-title">這個 Cloud 的內容</h2><span>{{ workspace.item_count }} 筆</span></div>
+      <div class="continue-list">
+        {% for item in workspace.recent %}
+        <a class="continue-row" data-source-id="{{ item.source_id }}" href="{{ item.url }}"><span class="row-icon">{{ icon(item.icon_name) }}</span><span class="row-content"><strong>{{ item.title }}</strong><small>{{ item.display_summary }}</small></span><span class="cloud-badge">{{ item.item_type_label }}</span></a>
+        {% else %}
+        <p class="empty-inline">這個 Cloud 尚未有已索引內容。</p>
+        {% endfor %}
+      </div>
+    </div>
+    <aside class="workspace-section custom-cloud-guide"><h2>如何使用</h2><p>先瀏覽最近內容，或從延伸主題與搜尋繼續探索；原始資料仍由 Notion 或 Obsidian 管理。</p></aside>
   </section>
   {% endif %}
 

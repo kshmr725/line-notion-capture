@@ -190,6 +190,32 @@ def test_custom_cloud_appears_consistently_in_home_nav_search_and_item_labels():
     assert "Private Cloud" not in home + search_html + item_html
 
 
+def test_custom_cloud_has_a_generic_isolated_workspace_and_unknown_keys_404():
+    repository = FakeRepository()
+    repository.cloud_labels = {"research": "研究資料"}
+    repository.items.append(item("custom-note", cloud_key="research"))
+    app = create_app(
+        dependencies=PortalDependencies(
+            repository, TenantResolver(), SearchService(), AnswerService(False)
+        )
+    )
+    app.config.update(TESTING=True)
+    client = app.test_client()
+
+    response = client.get("/cloud/research")
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert 'id="custom-cloud-workspace"' in html
+    assert "研究資料" in html
+    assert "Private note" in html
+    assert "Reliable agent systems" not in html
+    assert 'id="ai-workspace"' not in html
+    assert "轉成表格" not in html
+    assert "看圖表" not in html
+    assert client.get("/cloud/not-owned").status_code == 404
+
+
 def test_cloud_gallery_header_opens_an_input_ready_search(portal_setup):
     client, *_ = portal_setup
 
