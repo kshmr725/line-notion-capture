@@ -256,7 +256,9 @@ python scripts/verify_go_live.py --portal https://你的-portal-render-url
 
 Notion 首次連接後，Portal 會先顯示 AI 建議的分類預覽。使用者可以逐筆修改 `Cloud 名稱`：相同名稱會合併、不同名稱會建立新的 Cloud，也可以勾選「先不要加入」排除該筆資料。
 
-這些操作只改變 Portal 的唯讀投影，不會回寫、移動或刪除 Notion／Obsidian 原始內容。伺服器只接受當前登入使用者 proposal 內的 source ID；偽造或其他 tenant 的 ID 會被忽略。自訂 Cloud 名稱已保存於 `tenant_clouds`，但自訂 Cloud 的動態首頁卡片與導覽仍屬下一階段，現有 Web3／美食／AI 三個專屬視圖不受影響。
+這些操作只改變 Portal 的唯讀投影，不會回寫、移動或刪除 Notion／Obsidian 原始內容。伺服器只接受當前登入使用者 proposal 內的 source ID；偽造或其他 tenant 的 ID 會被忽略。自訂 Cloud 名稱保存於 `tenant_clouds`，並自動成為首頁卡片、上方導覽、搜尋篩選與 `/cloud/<custom-key>` 通用工作區。Web3／美食／AI 仍保留各自的專屬視圖。
+
+自訂 Cloud 通用工作區提供最近內容、延伸主題、相鄰 Cloud 與 Cloud 內搜尋。因為自訂分類尚未定義固定欄位 schema，表格、圖表、簡報與摘要產生器只在三個 canonical Cloud 顯示，避免提供會失敗的入口。
 
 ### Notion webhook 同步
 

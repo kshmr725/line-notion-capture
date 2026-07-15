@@ -27,7 +27,14 @@ The user edits only the Portal projection. The flow never writes, moves, or dele
 
 Verification after this continuation: `391 passed` and `git diff --check` clean.
 
-Remaining product work: read `tenant_clouds` in the Portal shell so custom names become first-class homepage cards, navigation entries, search filters, and `/cloud/<custom-key>` pages. Until then the editor is safe and persists the decision, but the three canonical Cloud workspaces remain the only dedicated navigation views.
+Dynamic custom Cloud navigation is now implemented locally:
+
+- `e9dae7d`: tenant-scoped Cloud label repository.
+- `3459698`: one request-local catalog shared by homepage, top navigation, search, item labels, breadcrumbs, and filter summaries.
+- `2dab8a4`: generic exact-key `/cloud/<custom-key>` workspace with unsupported derived-view actions hidden.
+- `1221b88`: responsive search and long-row safeguards found during browser verification.
+
+Canonical Web3/Food/AI workspaces retain their domain-specific layouts. Custom labels never cross tenants, and unknown/unowned route keys return 404. The external OAuth/webhook/durable-worker deployment blockers below remain unchanged.
 
 External work still required before production:
 
