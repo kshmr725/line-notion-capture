@@ -132,6 +132,9 @@ def test_css_encodes_focus_touch_responsive_and_reduced_motion_contracts(accessi
     assert "--portal-blue: #2f8cff" in css.lower()
     assert "#2f7168" not in css.lower()
     assert "gradient" not in css.lower()
+    assert ".global-search input" in css
+    assert "min-width: 0" in css
+    assert ".continue-row > :last-child" in css
 
 
 def test_javascript_supports_keyboard_filters_and_loading_feedback(accessible_client):
