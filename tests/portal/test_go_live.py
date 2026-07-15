@@ -19,6 +19,7 @@ def test_render_portal_declares_every_controlled_beta_secret_without_values():
     env = {entry["key"]: entry for entry in service["envVars"]}
 
     required_secrets = {
+        "PORTAL_DATABASE_URL",
         "PORTAL_SESSION_SECRET",
         "PORTAL_SMTP_HOST",
         "PORTAL_SMTP_USERNAME",
@@ -28,6 +29,8 @@ def test_render_portal_declares_every_controlled_beta_secret_without_values():
         "NOTION_OAUTH_CLIENT_SECRET",
         "NOTION_OAUTH_REDIRECT_URL",
         "PORTAL_TOKEN_ENCRYPTION_KEY",
+        "NOTION_WEBHOOK_SECRET",
+        "PORTAL_PROCESSOR_TOKEN",
     }
     assert required_secrets <= env.keys()
     assert all(env[name].get("sync") is False for name in required_secrets)
@@ -81,3 +84,26 @@ def test_portal_environment_check_reports_names_without_secret_values():
     assert check.ok is False
     assert "PORTAL_SMTP_PASSWORD" in check.detail
     assert "private-" not in check.detail
+
+
+def test_portal_environment_requires_https_oauth_callback_and_postgres():
+    environment = {
+        name: f"private-{index}"
+        for index, name in enumerate(verify_go_live.PORTAL_REQUIRED_ENV)
+    }
+    environment["PORTAL_DATABASE_URL"] = "sqlite:///tmp/portal.sqlite3"
+    environment["NOTION_OAUTH_REDIRECT_URL"] = "http://brain.example.com/oauth/notion/callback"
+
+    check = verify_go_live.check_portal_environment(environment)
+
+    assert check.ok is False
+    assert "PORTAL_DATABASE_URL must use PostgreSQL" in check.detail
+
+
+def test_render_portal_is_stateless_and_uses_a_protected_processor():
+    service = _portal_service()
+    env = {entry["key"]: entry for entry in service["envVars"]}
+
+    assert "PORTAL_DATABASE_PATH" not in env
+    assert env["PORTAL_DATABASE_URL"]["sync"] is False
+    assert env["PORTAL_PROCESSOR_TOKEN"]["sync"] is False

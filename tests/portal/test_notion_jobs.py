@@ -6,6 +6,7 @@ import subprocess
 import sys
 from types import SimpleNamespace
 from pathlib import Path
+from flask import Flask
 
 from brain_portal.config import PortalSettings
 from brain_portal.db import PortalRepository, init_portal_db, portal_connect
@@ -123,6 +124,74 @@ def test_processor_returns_none_when_queue_is_empty(tmp_path):
     ) is None
 
 
+def test_failed_job_is_requeued_with_a_bounded_retry(tmp_path):
+    repository = _repository(tmp_path)
+    connection = portal_connect(repository.path)
+    with connection:
+        connection.execute(
+            "UPDATE source_connections SET config_json = ? WHERE tenant_id = 'tenant-a'",
+            (json.dumps({"workspace_id": "workspace-a", "database_id": "db-a"}),),
+        )
+    connection.close()
+    notion_jobs.enqueue_notion_event(
+        repository,
+        event_id="event-retry",
+        workspace_id="workspace-a",
+        event_type="page.content_updated",
+        page_id="page-1",
+    )
+
+    status = notion_jobs.process_next_notion_job(
+        PortalSettings(),
+        repository,
+        None,
+        connector_factory=lambda **kwargs: (_ for _ in ()).throw(RuntimeError("temporary")),
+        decryptor=lambda settings, config: "token",
+    )
+
+    row = portal_connect(repository.path).execute(
+        "SELECT status, attempt_count, error_code FROM notion_sync_jobs WHERE event_id = ?",
+        ("event-retry",),
+    ).fetchone()
+    assert status == "retrying"
+    assert tuple(row) == ("queued", 1, "processing_failed")
+
+
+def test_expired_processing_lease_is_reclaimed_but_live_lease_is_not(tmp_path):
+    repository = _repository(tmp_path)
+    for event_id in ("expired", "live"):
+        notion_jobs.enqueue_notion_event(
+            repository,
+            event_id=event_id,
+            workspace_id="workspace-a",
+            event_type="page.content_updated",
+            page_id=f"page-{event_id}",
+        )
+    connection = portal_connect(repository.path)
+    with connection:
+        connection.execute(
+            """
+            UPDATE notion_sync_jobs SET status = 'processing', lease_expires_at = ?
+            WHERE event_id = 'expired'
+            """,
+            ("2000-01-01T00:00:00Z",),
+        )
+        connection.execute(
+            """
+            UPDATE notion_sync_jobs SET status = 'processing', lease_expires_at = ?
+            WHERE event_id = 'live'
+            """,
+            ("2999-01-01T00:00:00Z",),
+        )
+    connection.close()
+
+    claimed = notion_jobs._claim_next_job(repository, lease_seconds=60)
+    second = notion_jobs._claim_next_job(repository, lease_seconds=60)
+
+    assert claimed == ("expired", "tenant-a", "page-expired")
+    assert second is None
+
+
 def test_processor_command_processes_at_most_one_job(monkeypatch, capsys, tmp_path):
     monkeypatch.setattr(
         process_notion_sync_jobs,
@@ -151,3 +220,30 @@ def test_processor_script_runs_from_the_repository_root(tmp_path):
 
     assert result.returncode == 0
     assert result.stdout.strip() == "idle"
+
+
+def test_internal_processor_requires_bearer_token_and_drains_a_bounded_batch():
+    calls = []
+    app = Flask(__name__)
+    app.register_blueprint(
+        notion_jobs.create_queue_processor_blueprint(
+            processor_token="processor-secret",
+            process_one=lambda: calls.append(1) or ("completed" if len(calls) < 3 else None),
+            batch_limit=5,
+        )
+    )
+    client = app.test_client()
+
+    assert client.post("/internal/process-notion-jobs").status_code == 401
+    assert client.post(
+        "/internal/process-notion-jobs",
+        headers={"Authorization": "Bearer wrong"},
+    ).status_code == 401
+    response = client.post(
+        "/internal/process-notion-jobs",
+        headers={"Authorization": "Bearer processor-secret"},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json() == {"processed": 2}
+    assert len(calls) == 3

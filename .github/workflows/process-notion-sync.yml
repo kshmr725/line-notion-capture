@@ -1,0 +1,31 @@
+name: Process Notion sync queue
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: brain-cloud-notion-processor
+  cancel-in-progress: false
+
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Drain a bounded queue batch
+        env:
+          PORTAL_PROCESSOR_URL: ${{ secrets.PORTAL_PROCESSOR_URL }}
+          PORTAL_PROCESSOR_TOKEN: ${{ secrets.PORTAL_PROCESSOR_TOKEN }}
+        run: |
+          test -n "$PORTAL_PROCESSOR_URL"
+          test -n "$PORTAL_PROCESSOR_TOKEN"
+          curl --fail-with-body --silent --show-error \
+            --retry 2 --retry-all-errors --max-time 120 \
+            --request POST \
+            --header "Authorization: Bearer $PORTAL_PROCESSOR_TOKEN" \
+            "$PORTAL_PROCESSOR_URL/internal/process-notion-jobs"

@@ -28,8 +28,8 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn portal_app:app --bind 0.0.0.0:$PORT
     envVars:
-      - key: PORTAL_DATABASE_PATH
-        value: data/brain-portal.sqlite3
+      - key: PORTAL_DATABASE_URL
+        sync: false
       - key: PORTAL_DEV_AUTH
         value: false
       - key: PORTAL_SESSION_SECRET
@@ -57,4 +57,6 @@ services:
       - key: NOTION_TOKEN
         sync: false
       - key: NOTION_WEBHOOK_SECRET
+        sync: false
+      - key: PORTAL_PROCESSOR_TOKEN
         sync: false

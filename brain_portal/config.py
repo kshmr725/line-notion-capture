@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class PortalSettings:
+    database_url: str = os.getenv("PORTAL_DATABASE_URL", "")
     database_path: str = os.getenv(
         "PORTAL_DATABASE_PATH", "data/brain-portal.sqlite3"
     )
@@ -38,3 +39,10 @@ class PortalSettings:
     notion_oauth_redirect_url: str = os.getenv("NOTION_OAUTH_REDIRECT_URL", "")
     oauth_state_ttl_minutes: int = int(os.getenv("PORTAL_OAUTH_STATE_TTL_MINUTES", "10"))
     token_encryption_key: str = os.getenv("PORTAL_TOKEN_ENCRYPTION_KEY", "")
+    processor_token: str = os.getenv("PORTAL_PROCESSOR_TOKEN", "")
+    queue_max_attempts: int = int(os.getenv("PORTAL_QUEUE_MAX_ATTEMPTS", "5"))
+    queue_lease_seconds: int = int(os.getenv("PORTAL_QUEUE_LEASE_SECONDS", "300"))
+
+    @property
+    def database_target(self) -> str:
+        return self.database_url.strip() or self.database_path

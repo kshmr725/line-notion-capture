@@ -16,6 +16,8 @@ from brain_portal.models import KnowledgeItem, SearchHit, SyncRun
 
 PathLike = Union[str, os.PathLike[str]]
 TOKEN_PATTERN = re.compile(r"\w+", re.UNICODE)
+POSTGRES_PREFIXES = ("postgresql://", "postgres://")
+POSTGRES_NOW = "to_char((clock_timestamp() at time zone 'UTC'), 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')"
 
 
 SCHEMA = """
@@ -124,6 +126,10 @@ CREATE TABLE IF NOT EXISTS notion_sync_jobs (
     started_at TEXT,
     finished_at TEXT,
     error_code TEXT,
+    attempt_count INTEGER NOT NULL DEFAULT 0,
+    available_at TEXT,
+    lease_owner TEXT,
+    lease_expires_at TEXT,
     FOREIGN KEY (event_id) REFERENCES notion_webhook_events (event_id) ON DELETE CASCADE,
     FOREIGN KEY (tenant_id) REFERENCES tenants (tenant_id) ON DELETE CASCADE
 );
@@ -233,8 +239,66 @@ AFTER UPDATE OF tenant_key, chunk_text ON knowledge_chunks BEGIN
 END;
 """
 
+POSTGRES_SCHEMA = SCHEMA.split("CREATE VIRTUAL TABLE", 1)[0].replace(
+    "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')", POSTGRES_NOW
+)
 
-def portal_connect(path: PathLike) -> sqlite3.Connection:
+
+def is_postgres_target(target: PathLike) -> bool:
+    return str(target).strip().lower().startswith(POSTGRES_PREFIXES)
+
+
+def _postgres_sql(sql: str) -> str:
+    translated = sql.replace(
+        "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')", POSTGRES_NOW
+    ).replace("?", "%s")
+    return translated.replace("%s IS NULL", "CAST(%s AS TEXT) IS NULL")
+
+
+class PostgresConnection:
+    def __init__(self, url: str):
+        try:
+            import psycopg
+            from psycopg.rows import dict_row
+        except ImportError as error:
+            raise RuntimeError(
+                "PostgreSQL requires psycopg; install requirements.txt"
+            ) from error
+        self._connection = psycopg.connect(url, row_factory=dict_row)
+
+    def execute(self, sql: str, params=()):
+        return self._connection.execute(_postgres_sql(sql), params)
+
+    def executemany(self, sql: str, params):
+        cursor = self._connection.cursor()
+        cursor.executemany(_postgres_sql(sql), params)
+        return cursor
+
+    def executescript(self, script: str) -> None:
+        for statement in script.split(";"):
+            if statement.strip():
+                self._connection.execute(statement, prepare=False)
+
+    def commit(self) -> None:
+        self._connection.commit()
+
+    def rollback(self) -> None:
+        self._connection.rollback()
+
+    def close(self) -> None:
+        self._connection.close()
+
+    def __enter__(self):
+        self._connection.__enter__()
+        return self
+
+    def __exit__(self, *args):
+        return self._connection.__exit__(*args)
+
+
+def portal_connect(path: PathLike):
+    if is_postgres_target(path):
+        return PostgresConnection(str(path))
     database_path = Path(path)
     database_path.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(str(database_path))
@@ -246,10 +310,29 @@ def portal_connect(path: PathLike) -> sqlite3.Connection:
 def init_portal_db(path: PathLike) -> None:
     connection = portal_connect(path)
     try:
-        connection.executescript(SCHEMA)
+        connection.executescript(POSTGRES_SCHEMA if is_postgres_target(path) else SCHEMA)
+        if not is_postgres_target(path):
+            _migrate_sqlite(connection)
         connection.commit()
     finally:
         connection.close()
+
+
+def _migrate_sqlite(connection: sqlite3.Connection) -> None:
+    columns = {
+        row[1] for row in connection.execute("PRAGMA table_info(notion_sync_jobs)")
+    }
+    additions = {
+        "attempt_count": "INTEGER NOT NULL DEFAULT 0",
+        "available_at": "TEXT",
+        "lease_owner": "TEXT",
+        "lease_expires_at": "TEXT",
+    }
+    for name, definition in additions.items():
+        if name not in columns:
+            connection.execute(
+                f"ALTER TABLE notion_sync_jobs ADD COLUMN {name} {definition}"
+            )
 
 
 class PortalRepository:
@@ -354,9 +437,10 @@ class PortalRepository:
                     "DELETE FROM knowledge_chunks WHERE tenant_id = ? AND source_id = ?",
                     (item.tenant_id, item.source_id),
                 )
-                next_chunk_row_id = active_connection.execute(
-                    "SELECT COALESCE(MAX(chunk_row_id), 0) + 1 FROM knowledge_chunks"
-                ).fetchone()[0]
+                next_row = active_connection.execute(
+                    "SELECT COALESCE(MAX(chunk_row_id), 0) + 1 AS next_id FROM knowledge_chunks"
+                ).fetchone()
+                next_chunk_row_id = next_row["next_id"]
                 active_connection.executemany(
                     """
                     INSERT INTO knowledge_chunks (
@@ -394,7 +478,27 @@ class PortalRepository:
         match_query = _tenant_match_query(tenant_key, terms)
         connection = portal_connect(self.path)
         try:
-            candidate_rows = connection.execute(
+            if is_postgres_target(self.path):
+                corpus_rows = connection.execute(
+                    """
+                    SELECT chunks.source_id, chunks.chunk_text
+                    FROM knowledge_chunks AS chunks
+                    JOIN knowledge_items AS items
+                      ON items.tenant_id = chunks.tenant_id
+                     AND items.source_id = chunks.source_id
+                     AND items.deleted_at IS NULL
+                     AND (? IS NULL OR items.cloud_key = ?)
+                    WHERE chunks.tenant_id = ? AND chunks.tenant_key = ?
+                    """,
+                    (cloud_key, cloud_key, tenant_id, tenant_key),
+                ).fetchall()
+                candidate_rows = [
+                    row
+                    for row in corpus_rows
+                    if any(term in _tokenize(row["chunk_text"]) for term in terms)
+                ]
+            else:
+                candidate_rows = connection.execute(
                 """
                 SELECT chunks.source_id, chunks.chunk_text
                 FROM knowledge_chunks_fts AS fts
@@ -410,22 +514,23 @@ class PortalRepository:
                 WHERE knowledge_chunks_fts MATCH ?
                 """,
                 (tenant_id, tenant_key, cloud_key, cloud_key, match_query),
-            ).fetchall()
+                ).fetchall()
             if not candidate_rows:
                 return []
-            corpus_rows = connection.execute(
-                """
-                SELECT chunk_text
-                FROM knowledge_chunks AS chunks
-                JOIN knowledge_items AS items
-                  ON items.tenant_id = chunks.tenant_id
-                 AND items.source_id = chunks.source_id
-                 AND items.deleted_at IS NULL
-                 AND (? IS NULL OR items.cloud_key = ?)
-                WHERE chunks.tenant_id = ? AND chunks.tenant_key = ?
-                """,
-                (cloud_key, cloud_key, tenant_id, tenant_key),
-            ).fetchall()
+            if not is_postgres_target(self.path):
+                corpus_rows = connection.execute(
+                    """
+                    SELECT chunk_text
+                    FROM knowledge_chunks AS chunks
+                    JOIN knowledge_items AS items
+                      ON items.tenant_id = chunks.tenant_id
+                     AND items.source_id = chunks.source_id
+                     AND items.deleted_at IS NULL
+                     AND (? IS NULL OR items.cloud_key = ?)
+                    WHERE chunks.tenant_id = ? AND chunks.tenant_key = ?
+                    """,
+                    (cloud_key, cloud_key, tenant_id, tenant_key),
+                ).fetchall()
             scores = _tenant_bm25_scores(terms, corpus_rows, candidate_rows)
             hits = []
             for source_id, score in sorted(

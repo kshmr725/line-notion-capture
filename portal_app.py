@@ -14,10 +14,14 @@ from brain_portal.auth import (
     resolve_principal,
 )
 from brain_portal.config import PortalSettings
-from brain_portal.db import PortalRepository
+from brain_portal.db import PortalRepository, init_portal_db
 from brain_portal.embeddings import GeminiEmbeddingProvider
 from brain_portal.models import TenantContext
 from brain_portal.notion_event_webhook import create_tenant_aware_notion_webhook_blueprint
+from brain_portal.notion_jobs import (
+    create_queue_processor_blueprint,
+    process_next_notion_job,
+)
 from brain_portal.search import SearchResults, hybrid_search
 from brain_portal.web import PortalDependencies, create_portal_blueprint
 
@@ -29,11 +33,12 @@ def create_app(
     settings = settings or PortalSettings()
     app = Flask(__name__)
     app.config.update(
-        PORTAL_DATABASE_PATH=settings.database_path,
+        PORTAL_DATABASE_PATH=settings.database_target,
         PORTAL_TENANT_ID=settings.tenant_id,
         PORTAL_TENANT_NAME=settings.tenant_name,
     )
-    repository = PortalRepository(settings.database_path)
+    init_portal_db(settings.database_target)
+    repository = PortalRepository(settings.database_target)
     mail_transport = build_mail_transport(settings)
     app.extensions["mail_transport"] = mail_transport
     app.register_blueprint(
@@ -46,6 +51,22 @@ def create_app(
         app.register_blueprint(
             create_tenant_aware_notion_webhook_blueprint(
                 repository, webhook_secret=settings.notion_webhook_secret
+            )
+        )
+    if settings.processor_token.strip():
+        processor_embedder = (
+            GeminiEmbeddingProvider(
+                settings.gemini_api_key.strip(), timeout=settings.ai_timeout_seconds
+            )
+            if settings.gemini_api_key.strip()
+            else None
+        )
+        app.register_blueprint(
+            create_queue_processor_blueprint(
+                processor_token=settings.processor_token,
+                process_one=lambda: process_next_notion_job(
+                    settings, repository, processor_embedder
+                ),
             )
         )
 
@@ -64,7 +85,7 @@ def create_app(
 def _default_dependencies(
     settings: PortalSettings, repository: PortalRepository | None = None
 ) -> PortalDependencies:
-    repository = repository or PortalRepository(settings.database_path)
+    repository = repository or PortalRepository(settings.database_target)
     gemini_key = settings.gemini_api_key.strip()
     deepseek_key = settings.deepseek_api_key.strip()
     embedder = (

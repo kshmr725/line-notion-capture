@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import json
+import hmac
+import uuid
+from datetime import datetime, timedelta, timezone
 
 from brain_portal.auth import decrypt_source_token
 from brain_portal.config import PortalSettings
 from brain_portal.connectors.notion import NotionConnector
 from brain_portal.db import PortalRepository, portal_connect
 from brain_portal.indexer import index_document, record_permission_denied
+from flask import Blueprint, abort, jsonify, request
 
 
 def enqueue_notion_event(
@@ -81,7 +85,7 @@ def process_next_notion_job(
     decryptor=decrypt_source_token,
 ) -> str | None:
     """Claim at most one queued event and update only its resolved tenant."""
-    job = _claim_next_job(repository)
+    job = _claim_next_job(repository, lease_seconds=settings.queue_lease_seconds)
     if job is None:
         return None
     event_id, tenant_id, page_id = job
@@ -106,35 +110,89 @@ def process_next_notion_job(
         _finish_job(repository, event_id, "failed", "permission_required")
         return "failed"
     except Exception:
-        _finish_job(repository, event_id, "failed", "processing_failed")
-        return "failed"
+        return _retry_or_finish(
+            repository,
+            event_id,
+            "processing_failed",
+            max_attempts=max(1, settings.queue_max_attempts),
+        )
 
 
-def _claim_next_job(repository: PortalRepository) -> tuple[str, str, str] | None:
+def _claim_next_job(
+    repository: PortalRepository, *, lease_seconds: int = 300
+) -> tuple[str, str, str] | None:
+    now = datetime.now(timezone.utc)
+    now_text = now.isoformat().replace("+00:00", "Z")
+    lease_expires = (now + timedelta(seconds=max(30, lease_seconds))).isoformat().replace(
+        "+00:00", "Z"
+    )
+    lease_owner = uuid.uuid4().hex
     connection = portal_connect(repository.path)
     try:
         with connection:
             row = connection.execute(
                 """
                 SELECT event_id, tenant_id, page_id FROM notion_sync_jobs
-                WHERE status = 'queued' ORDER BY created_at LIMIT 1
-                """
+                WHERE (
+                    status = 'queued' AND (available_at IS NULL OR available_at <= ?)
+                ) OR (
+                    status = 'processing' AND lease_expires_at IS NOT NULL
+                    AND lease_expires_at <= ?
+                )
+                ORDER BY created_at LIMIT 1
+                """,
+                (now_text, now_text),
             ).fetchone()
             if row is None:
                 return None
             updated = connection.execute(
                 """
                 UPDATE notion_sync_jobs
-                SET status = 'processing', started_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                WHERE event_id = ? AND status = 'queued'
+                SET status = 'processing', started_at = ?,
+                    lease_owner = ?, lease_expires_at = ?
+                WHERE event_id = ? AND (
+                    (status = 'queued' AND (available_at IS NULL OR available_at <= ?))
+                    OR (status = 'processing' AND lease_expires_at IS NOT NULL
+                        AND lease_expires_at <= ?)
+                )
                 """,
-                (row["event_id"],),
+                (
+                    now_text,
+                    lease_owner,
+                    lease_expires,
+                    row["event_id"],
+                    now_text,
+                    now_text,
+                ),
             )
             if updated.rowcount != 1:
                 return None
             return row["event_id"], row["tenant_id"], row["page_id"]
     finally:
         connection.close()
+
+
+def create_queue_processor_blueprint(
+    *, processor_token: str, process_one, batch_limit: int = 10
+) -> Blueprint:
+    blueprint = Blueprint("notion_queue_processor", __name__)
+
+    @blueprint.post("/internal/process-notion-jobs")
+    def process_jobs():
+        provided = request.headers.get("Authorization", "").removeprefix("Bearer ")
+        if not processor_token.strip() or not hmac.compare_digest(
+            provided.encode("utf-8"), processor_token.encode("utf-8")
+        ):
+            abort(401)
+        processed = 0
+        for _ in range(max(1, min(batch_limit, 50))):
+            status = process_one()
+            if status is None:
+                break
+            processed += 1
+        return jsonify({"processed": processed})
+
+    return blueprint
 
 
 def _connection_config(repository: PortalRepository, tenant_id: str) -> dict | None:
@@ -167,10 +225,53 @@ def _finish_job(repository: PortalRepository, event_id: str, status: str, error_
                 """
                 UPDATE notion_sync_jobs
                 SET status = ?, error_code = ?,
-                    finished_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                    finished_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                    lease_owner = NULL, lease_expires_at = NULL
                 WHERE event_id = ?
                 """,
                 (status, error_code, event_id),
             )
+    finally:
+        connection.close()
+
+
+def _retry_or_finish(
+    repository: PortalRepository,
+    event_id: str,
+    error_code: str,
+    *,
+    max_attempts: int,
+) -> str:
+    connection = portal_connect(repository.path)
+    try:
+        with connection:
+            row = connection.execute(
+                "SELECT attempt_count FROM notion_sync_jobs WHERE event_id = ?",
+                (event_id,),
+            ).fetchone()
+            attempts = (int(row["attempt_count"]) if row is not None else 0) + 1
+            terminal = attempts >= max_attempts
+            available_at = (
+                datetime.now(timezone.utc)
+                + timedelta(seconds=min(300, 2 ** min(attempts, 8)))
+            ).isoformat().replace("+00:00", "Z")
+            connection.execute(
+                """
+                UPDATE notion_sync_jobs
+                SET status = ?, attempt_count = ?, error_code = ?, available_at = ?,
+                    started_at = NULL, lease_owner = NULL, lease_expires_at = NULL,
+                    finished_at = CASE WHEN ? THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now') ELSE NULL END
+                WHERE event_id = ?
+                """,
+                (
+                    "dead_letter" if terminal else "queued",
+                    attempts,
+                    error_code,
+                    None if terminal else available_at,
+                    terminal,
+                    event_id,
+                ),
+            )
+            return "failed" if terminal else "retrying"
     finally:
         connection.close()

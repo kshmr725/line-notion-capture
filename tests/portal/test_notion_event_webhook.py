@@ -83,6 +83,19 @@ def test_invalid_signature_is_rejected_before_any_job_is_queued(tmp_path):
     assert response.status_code == 401
     connection = portal_connect(repository.path)
     assert connection.execute("SELECT COUNT(*) FROM notion_sync_jobs").fetchone()[0] == 0
+
+
+def test_notion_subscription_verification_is_acknowledged_without_logging_or_queueing(tmp_path):
+    client, repository = _client(tmp_path)
+
+    response = client.post(
+        "/hooks/notion/events", json={"verification_token": "copy-in-notion-ui"}
+    )
+
+    assert response.status_code == 200
+    assert response.get_data(as_text=True) == ""
+    connection = portal_connect(repository.path)
+    assert connection.execute("SELECT COUNT(*) FROM notion_sync_jobs").fetchone()[0] == 0
     connection.close()
 
 

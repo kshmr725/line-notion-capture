@@ -13,8 +13,9 @@ from brain_portal.notion_jobs import process_next_notion_job
 
 def main() -> int:
     settings = PortalSettings()
-    init_portal_db(settings.database_path)
-    repository = PortalRepository(settings.database_path)
+    database_target = getattr(settings, "database_target", settings.database_path)
+    init_portal_db(database_target)
+    repository = PortalRepository(database_target)
     embedder = (
         GeminiEmbeddingProvider(settings.gemini_api_key, timeout=settings.ai_timeout_seconds)
         if settings.gemini_api_key.strip()

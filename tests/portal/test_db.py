@@ -2,7 +2,22 @@ from dataclasses import replace
 
 import pytest
 
-from brain_portal.db import PortalRepository, init_portal_db, portal_connect
+from brain_portal.db import (
+    POSTGRES_SCHEMA,
+    PortalRepository,
+    init_portal_db,
+    is_postgres_target,
+    portal_connect,
+)
+
+
+def test_postgres_target_and_schema_are_production_safe():
+    assert is_postgres_target("postgresql://example.invalid/brain") is True
+    assert is_postgres_target("postgres://example.invalid/brain") is True
+    assert is_postgres_target("data/brain.sqlite3") is False
+    assert "CREATE VIRTUAL TABLE" not in POSTGRES_SCHEMA
+    assert "notion_sync_jobs" in POSTGRES_SCHEMA
+    assert "lease_expires_at" in POSTGRES_SCHEMA
 from brain_portal.models import KnowledgeItem
 
 

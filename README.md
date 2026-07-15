@@ -270,4 +270,4 @@ Portal 的公開 intake 是 `POST /hooks/notion/events`。它會驗證 `X-Notion
 python scripts/process_notion_sync_jobs.py
 ```
 
-首次設置 Notion webhook 訂閱與外部排程前，必須先完成 production secret、durable hosting 與真人 OAuth 驗收；本機 SQLite 只能作為可重建 projection 的開發／受控 Beta 過渡方案。
+公開 Beta 使用 `PORTAL_DATABASE_URL` 連接 Supabase PostgreSQL；本機 SQLite 只供開發與測試。Webhook 只接受 Notion 的首次訂閱驗證或已通過 HMAC 的事件，tenant 永遠由伺服器保存的 workspace connection 解析。事件寫入 durable queue 後，由 `.github/workflows/process-notion-sync.yml` 定期呼叫受 bearer token 保護的 processor。完整設定依 `GO_LIVE.md` 的「零成本公開 Beta 設定」。

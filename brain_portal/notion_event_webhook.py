@@ -17,11 +17,19 @@ def create_tenant_aware_notion_webhook_blueprint(repository, *, webhook_secret: 
     @webhook.post("/hooks/notion/events")
     def receive():
         raw_body = request.get_data()
+        payload = request.get_json(silent=True)
+        payload = payload if isinstance(payload, dict) else {}
+        if (
+            isinstance(payload.get("verification_token"), str)
+            and payload.get("verification_token", "").strip()
+            and len(payload) == 1
+        ):
+            # Notion shows this one-time token in its connection UI. Acknowledge
+            # without logging, persisting, or echoing the secret.
+            return ("", 200)
         signature = request.headers.get("X-Notion-Signature", "")
         if not _valid_signature(webhook_secret, raw_body, signature):
             abort(401)
-        payload = request.get_json(silent=True)
-        payload = payload if isinstance(payload, dict) else {}
         entity = payload.get("entity")
         page_id = entity.get("id") if isinstance(entity, dict) else ""
         event_type = payload.get("type")

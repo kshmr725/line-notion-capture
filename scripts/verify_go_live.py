@@ -12,7 +12,7 @@ load_dotenv()
 
 
 PORTAL_REQUIRED_ENV = (
-    "PORTAL_DATABASE_PATH",
+    "PORTAL_DATABASE_URL",
     "PORTAL_SESSION_SECRET",
     "PORTAL_SMTP_HOST",
     "PORTAL_SMTP_USERNAME",
@@ -22,6 +22,8 @@ PORTAL_REQUIRED_ENV = (
     "NOTION_OAUTH_CLIENT_SECRET",
     "NOTION_OAUTH_REDIRECT_URL",
     "PORTAL_TOKEN_ENCRYPTION_KEY",
+    "NOTION_WEBHOOK_SECRET",
+    "PORTAL_PROCESSOR_TOKEN",
 )
 
 
@@ -83,6 +85,16 @@ def check_portal_environment(environment=None) -> Check:
         return Check("Portal environment", False, "PORTAL_DEV_AUTH must be false")
     if values.get("PORTAL_TENANT_ID", "").strip():
         return Check("Portal environment", False, "PORTAL_TENANT_ID must be empty")
+    database_url = values.get("PORTAL_DATABASE_URL", "").strip()
+    if not database_url.startswith(("postgresql://", "postgres://")):
+        return Check(
+            "Portal environment", False, "PORTAL_DATABASE_URL must use PostgreSQL"
+        )
+    redirect_url = values.get("NOTION_OAUTH_REDIRECT_URL", "").strip()
+    if not redirect_url.startswith("https://"):
+        return Check(
+            "Portal environment", False, "NOTION_OAUTH_REDIRECT_URL must use HTTPS"
+        )
     return Check("Portal environment", True, "required names are configured")
 
 

@@ -182,7 +182,7 @@ Brain Cloud Portal 是 `render.yaml` 裡另一個 service (`brain-cloud-portal`)
 ### 部署前
 
 1. 在 Render 建立 `brain-cloud-portal` service(`render.yaml` 已含宣告),`startCommand` 是 `gunicorn portal_app:app`。
-2. Controlled Beta 不設定 `PORTAL_TENANT_ID`;依 `.env.example` 設定 `PORTAL_SESSION_SECRET`、`PORTAL_SMTP_*`、`NOTION_OAUTH_*`、`PORTAL_TOKEN_ENCRYPTION_KEY`、AI provider keys 與 `NOTION_WEBHOOK_SECRET`。
+2. Controlled Beta 不設定 `PORTAL_TENANT_ID`;公開 Beta 必須設定 Supabase PostgreSQL 的 `PORTAL_DATABASE_URL`，並依 `.env.example` 設定 `PORTAL_SESSION_SECRET`、`PORTAL_SMTP_*`、`NOTION_OAUTH_*`、`PORTAL_TOKEN_ENCRYPTION_KEY`、AI provider keys、`NOTION_WEBHOOK_SECRET` 與 `PORTAL_PROCESSOR_TOKEN`。
 3. `PORTAL_DEV_AUTH` 必須是 `false`;缺少 production SMTP 時服務會 fail closed。
 4. 在 Notion integration 後台把 callback 設為 `NOTION_OAUTH_REDIRECT_URL`,但啟用真實 OAuth 與 webhook 前仍需產品負責人明確授權。
 
@@ -202,7 +202,18 @@ python scripts/verify_go_live.py --portal https://你的-portal-render-url
 
 ### Rollback
 
-- Portal 資料庫(`PORTAL_DATABASE_PATH`)只是唯讀投影,直接刪除該 SQLite 檔案並重新索引即可回到乾淨狀態,不會動到 Obsidian 或 Notion 正本。
+- 本機開發可刪除 `PORTAL_DATABASE_PATH` 指向的 SQLite 投影後重建；公開 Beta 的 Supabase PostgreSQL 不應直接刪除，先保留 tenant 與 OAuth control-plane tables，再用來源重新建立 projection。
 - 在 Render 上把 `brain-cloud-portal` service 回滾到前一個 deploy,不影響 `line-notion-capture` service。
 
 白話:Portal 永遠可以從 Obsidian/Notion 正本重建,資料庫只是快取,不是正本。
+
+### 零成本公開 Beta 設定
+
+1. 在 Supabase 建立 PostgreSQL project，從 Connect 畫面複製 server-side connection string 到 Render 的 `PORTAL_DATABASE_URL`。不要把連線字串貼進 Git、文件或聊天。
+2. 在 Notion Developer Portal 建立 public integration，callback 精確設為 `https://你的公開網域/oauth/notion/callback`，再把 client ID/secret 與同一 HTTPS URL 填入 Render。
+3. 建立 webhook subscription，URL 使用 `https://你的公開網域/hooks/notion/events`。首次 verification POST 會收到空白 200；從 Notion UI 複製 verification token 到 Render 的 `NOTION_WEBHOOK_SECRET` 後重新部署。程式不記錄、保存或回傳該 token。
+4. 產生高熵 `PORTAL_PROCESSOR_TOKEN`，同一值放入 Render 與 GitHub Actions secret；GitHub secret `PORTAL_PROCESSOR_URL` 填公開網域（不要加 endpoint path）。
+5. `.github/workflows/process-notion-sync.yml` 每 10 分鐘呼叫受保護 processor，每次最多處理 10 筆。重複 webhook 會去重；暫時失敗會重試，達上限後進 `dead_letter`。
+6. 執行 `.venv/bin/python scripts/verify_go_live.py --portal https://你的公開網域`。驗證器只列環境變數名稱與 HTTP 結果，不輸出 secret。
+
+Render 免費服務可能休眠，GitHub scheduled workflow 也不是即時排程；此組合適合受控 Beta，不承諾即時同步 SLA。需要穩定即時處理時才升級常駐 worker。
