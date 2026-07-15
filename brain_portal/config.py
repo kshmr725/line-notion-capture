@@ -20,6 +20,7 @@ class PortalSettings:
         "PORTAL_DEEPSEEK_ANSWER_MODEL", "deepseek-chat"
     )
     notion_token: str = os.getenv("NOTION_TOKEN", "")
+    notion_webhook_secret: str = os.getenv("NOTION_WEBHOOK_SECRET", "")
     notion_api_version: str = "2026-03-11"
     session_secret: str = os.getenv("PORTAL_SESSION_SECRET", "")
     session_ttl_days: int = int(os.getenv("PORTAL_SESSION_TTL_DAYS", "14"))

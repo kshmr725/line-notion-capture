@@ -17,6 +17,7 @@ from brain_portal.config import PortalSettings
 from brain_portal.db import PortalRepository
 from brain_portal.embeddings import GeminiEmbeddingProvider
 from brain_portal.models import TenantContext
+from brain_portal.notion_event_webhook import create_tenant_aware_notion_webhook_blueprint
 from brain_portal.search import SearchResults, hybrid_search
 from brain_portal.web import PortalDependencies, create_portal_blueprint
 
@@ -41,6 +42,12 @@ def create_app(
     app.register_blueprint(
         create_portal_blueprint(dependencies or _default_dependencies(settings, repository))
     )
+    if settings.notion_webhook_secret.strip():
+        app.register_blueprint(
+            create_tenant_aware_notion_webhook_blueprint(
+                repository, webhook_secret=settings.notion_webhook_secret
+            )
+        )
 
     @app.errorhandler(401)
     def redirect_unauthenticated(error):
